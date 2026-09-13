@@ -73,16 +73,15 @@
   <!-- ------------------------------------------------------------ 4 boundary conditions -->
   <div class="card">
     <h2>4. What happens on each face</h2>
-    <table class="in">
-      <tr><td style="width:40%">Temperature unit for everything below</td><td><select id="tU"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select></td></tr>
-    </table>
     <table class="in faces" id="faces"></table>
     <table class="in" style="margin-top:6px">
       <tr><td style="width:40%">Heat generated inside the block</td><td><input id="qgen" type="number" step="any" value="0"></td><td style="width:110px"><select id="qgenU"><option value="W">W total</option><option value="Wm3">W/m³</option></select></td></tr>
     </table>
     <div class="note">Fixed temperature: the face is held at that value. Heat flux: heat pushed into the face (a heater, a chip). Insulated: nothing crosses.
       Convection: the face exchanges heat with a fluid at T<sub>∞</sub> through the coefficient h; tick radiation to add ε σ (T⁴ − T<sub>sur</sub>⁴), and sun to add absorbed sunlight α G (G ≈ 800 to 1000 W/m² in full sun).</div>
-    <div style="margin-top:12px"><button id="solve" class="primary">Solve steady state</button> <span id="status" class="note" style="display:inline;margin-left:10px"></span></div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button id="solve" class="primary">Solve steady state</button>
+      <span class="note" style="margin:0">show results in</span> <select id="tU" style="width:auto"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select>
+      <span id="status" class="note" style="margin:0"></span></div>
   </div>
 
   <!-- ------------------------------------------------------------ results -->
@@ -136,11 +135,11 @@ function faceRow(key, label) {
   return `<tr data-face="${key}"><td style="width:26%">${label}</td>
     <td style="width:22%"><select class="bc"><option value="fixed">fixed temperature</option><option value="flux">heat flux in</option><option value="insulated">insulated</option><option value="conv">convection</option></select></td>
     <td class="p">
-      <span class="pf fixed"><span class="lab">T =</span> <input class="Tfix" type="number" step="any" value="100"></span>
+      <span class="pf fixed"><span class="lab">T =</span> <input class="Tfix" type="number" step="any" value="100"> <select class="TfixU" style="width:auto"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select></span>
       <span class="pf flux"><span class="lab">q =</span> <input class="q" type="number" step="any" value="5000"> <select class="qU"><option value="Wm2">W/m²</option><option value="W">W total</option><option value="btu">BTU/hr·ft²</option></select></span>
       <span class="pf conv"><span class="lab">h =</span> <input class="h" type="number" step="any" value="15"> <select class="hU"><option value="1">W/m²K</option><option value="5.678263">BTU/hr·ft²·°F</option></select>
-        <span class="lab">T∞ =</span> <input class="Tinf" type="number" step="any" value="25">
-        <label class="lab"><input type="checkbox" class="rad"> radiation</label> <span class="pf rad"><span class="lab">ε =</span> <input class="eps" type="number" step="any" min="0" max="1" value="0.9"> <span class="lab">T<sub>sur</sub> =</span> <input class="Tsur" type="number" step="any" value="25"></span>
+        <span class="lab">T∞ =</span> <input class="Tinf" type="number" step="any" value="25"> <select class="TinfU" style="width:auto"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select>
+        <label class="lab"><input type="checkbox" class="rad"> radiation</label> <span class="pf rad"><span class="lab">ε =</span> <input class="eps" type="number" step="any" min="0" max="1" value="0.9"> <span class="lab">T<sub>sur</sub> =</span> <input class="Tsur" type="number" step="any" value="25"> <select class="TsurU" style="width:auto"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select></span>
         <label class="lab"><input type="checkbox" class="sun"> sun</label> <span class="pf sun"><span class="lab">G =</span> <input class="G" type="number" step="any" value="800"> <span class="lab">W/m² absorptivity α =</span> <input class="alpha" type="number" step="any" min="0" max="1" value="0.6"></span></span>
     </td></tr>`;
 }
@@ -212,15 +211,15 @@ sketch();
 
 // ------------------------------------------------------------------ solver (finite volume, steady, CG)
 function readBCs() {
-  const tu = $('tU').value, out = {};
+  const out = {};
   const [Lx, Ly, Lz] = dims(), areas = {'-x': Ly * Lz, '+x': Ly * Lz, '-y': Lx * Lz, '+y': Lx * Lz, '-z': Lx * Ly, '+z': Lx * Ly};
   document.querySelectorAll('#faces tr').forEach(row => {
-    const f = row.dataset.face, t = row.querySelector('.bc').value, g = c => +row.querySelector(c).value;
-    if (t === 'fixed') out[f] = {type: t, T: toC(g('.Tfix'), tu)};
+    const f = row.dataset.face, t = row.querySelector('.bc').value, g = c => +row.querySelector(c).value, gu = c => row.querySelector(c).value;
+    if (t === 'fixed') out[f] = {type: t, T: toC(g('.Tfix'), gu('.TfixU'))};
     else if (t === 'flux') { const u = row.querySelector('.qU').value; out[f] = {type: t, q: u === 'W' ? g('.q') / areas[f] : u === 'btu' ? g('.q') * 3.154591 : g('.q')}; }
     else if (t === 'insulated') out[f] = {type: t};
-    else out[f] = {type: t, h: g('.h') * +row.querySelector('.hU').value, Tinf: toC(g('.Tinf'), tu),
-                   eps: row.querySelector('.rad').checked ? g('.eps') : 0, Tsur: toC(g('.Tsur'), tu),
+    else out[f] = {type: t, h: g('.h') * +row.querySelector('.hU').value, Tinf: toC(g('.Tinf'), gu('.TinfU')),
+                   eps: row.querySelector('.rad').checked ? g('.eps') : 0, Tsur: toC(g('.Tsur'), gu('.TsurU')),
                    solar: row.querySelector('.sun').checked ? g('.G') * g('.alpha') : 0};   // absorbed W/m^2
   });
   return out;
