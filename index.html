@@ -54,7 +54,7 @@
       <tr><td>Width W (y)</td><td><input type="range" id="Wr" value="0.05"></td><td><input type="number" id="W" step="any" value="0.05"></td><td><select id="WU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
       <tr><td>Height H (z)</td><td><input type="range" id="Hr" value="0.02"></td><td><input type="number" id="H" step="any" value="0.02"></td><td><select id="HU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
     </table>
-    <svg id="sketch" class="sketch" viewBox="0 0 360 230"></svg>
+    <svg id="sketch" class="sketch" viewBox="0 0 720 240" style="max-width:700px"></svg>
     <div class="note" id="sketchNote"></div>
 
     <h2 style="margin-top:14px">2. Material</h2>
@@ -190,22 +190,40 @@ function sketch() {
   const Lmax = Math.max(Lx, Ly, Lz);
   let clamped = false;
   const r = [Lx, Ly, Lz].map(v => { const q = v / Lmax; if (q < 0.1) { clamped = true; return 0.1; } return q; });
-  const S = 150, ax = S * r[0], ay = S * r[1], az = S * r[2];
-  // isometric: x to the right-down, y to the right-up, z up
-  const P = (x, y, z) => [180 + (x - y) * 0.866, 150 - (x + y) * 0.5 - z];
+  const S = 130, ax = S * r[0], ay = S * r[1], az = S * r[2];
   const bc = f => document.querySelector(`#faces tr[data-face="${f}"] .bc`).value;
-  const poly = (pts, f) => `<polygon points="${pts.map(p => P(...p).join(',')).join(' ')}" fill="${FACE_COLOR[bc(f)]}" fill-opacity=".55" stroke="#1c2733" stroke-width="1.2"/>`;
-  const top = poly([[0, 0, az], [ax, 0, az], [ax, ay, az], [0, ay, az]], '+z');
-  const front = poly([[0, 0, 0], [ax, 0, 0], [ax, 0, az], [0, 0, az]], '-y');
-  const left = poly([[0, 0, 0], [0, ay, 0], [0, ay, az], [0, 0, az]], '-x');
-  const lab = (p, t) => `<text x="${P(...p)[0]}" y="${P(...p)[1]}" font-size="11" text-anchor="middle" fill="#1c2733">${t}</text>`;
+  // one isometric view: P projects (x,y,z); faces given as [name, label, points]
+  const view = (ox, P, facesToDraw, title) => {
+    let out = '';
+    for (const [f, label, pts] of facesToDraw) {
+      const sp = pts.map(p => P(...p));
+      const cx = sp.reduce((a, p) => a + p[0], 0) / 4, cy = sp.reduce((a, p) => a + p[1], 0) / 4;
+      out += `<polygon points="${sp.map(p => p.join(',')).join(' ')}" fill="${FACE_COLOR[bc(f)]}" fill-opacity=".6" stroke="#1c2733" stroke-width="1.2"/>
+              <text x="${cx}" y="${cy + 4}" font-size="11" font-weight="600" text-anchor="middle" fill="#1c2733">${label}</text>`;
+    }
+    return out + `<text x="${ox}" y="18" font-size="11" text-anchor="middle" fill="#66768a">${title}</text>`;
+  };
+  // view A: from front-top-left  -> shows top (+z), front (-y), left (-x)
+  const PA = (x, y, z) => [180 + (x - y) * 0.866, 160 - (x + y) * 0.5 - z];
+  const A = view(180, PA, [
+    ['-x', 'left',  [[0, 0, 0], [0, ay, 0], [0, ay, az], [0, 0, az]]],
+    ['-y', 'front', [[0, 0, 0], [ax, 0, 0], [ax, 0, az], [0, 0, az]]],
+    ['+z', 'top',   [[0, 0, az], [ax, 0, az], [ax, ay, az], [0, ay, az]]],
+  ], 'seen from the front, above');
+  // view B: from back-bottom-right -> shows bottom (-z), back (+y), right (+x); drawn by mirroring the block
+  const PB = (x, y, z) => [540 + ((ax - x) - (ay - y)) * 0.866, 80 + ((ax - x) + (ay - y)) * 0.5 + (az - z)];
+  const B = view(540, PB, [
+    ['+x', 'right',  [[ax, 0, 0], [ax, ay, 0], [ax, ay, az], [ax, 0, az]]],
+    ['+y', 'back',   [[0, ay, 0], [ax, ay, 0], [ax, ay, az], [0, ay, az]]],
+    ['-z', 'bottom', [[0, 0, 0], [ax, 0, 0], [ax, ay, 0], [0, ay, 0]]],
+  ], 'seen from the back, below');
   const legend = Object.entries({fixed: 'fixed T', flux: 'heat in', insulated: 'insulated', conv: 'convection'}).map(([k, t], i) =>
-    `<rect x="${8 + i * 88}" y="212" width="10" height="10" fill="${FACE_COLOR[k]}" fill-opacity=".7"/><text x="${22 + i * 88}" y="221" font-size="10" fill="#66768a">${t}</text>`).join('');
-  $('sketch').innerHTML = left + front + top + lab([ax / 2, -16, -8], 'L') + lab([-16, ay / 2, -8], 'W') + lab([ax + 14, -6, az / 2], 'H') + legend;
+    `<rect x="${200 + i * 88}" y="226" width="10" height="10" fill="${FACE_COLOR[k]}" fill-opacity=".7"/><text x="${214 + i * 88}" y="235" font-size="10" fill="#66768a">${t}</text>`).join('');
+  $('sketch').innerHTML = A + B + legend;
   const n = gridSize();
   $('gridNote').textContent = `${n[0]} × ${n[1]} × ${n[2]} cells = ${(n[0] * n[1] * n[2]).toLocaleString()} (sized from the block proportions; the longest side gets the most cells)`;
   $('sketchNote').innerHTML = (clamped ? '<span class="warn">Sketch not to scale (very thin block); the calculation uses the true dimensions.</span> ' : '') +
-    'Visible: top, front (y = 0), and left (x = 0) faces, colored by their boundary condition.';
+    'All six faces, colored by their boundary condition: left view shows top, front, and left; right view shows bottom, back, and right.';
 }
 sketch();
 
