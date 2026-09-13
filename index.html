@@ -50,9 +50,9 @@
   <div class="card">
     <h2>1. The block</h2>
     <table class="in dim">
-      <tr><td>Length L (x)</td><td><input type="range" id="Lr" min="1" max="500" step="1" value="100"></td><td><input type="number" id="L" step="any" value="100"></td><td rowspan="3"><select id="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1">m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
-      <tr><td>Width W (y)</td><td><input type="range" id="Wr" min="1" max="500" step="1" value="60"></td><td><input type="number" id="W" step="any" value="60"></td></tr>
-      <tr><td>Height H (z)</td><td><input type="range" id="Hr" min="1" max="500" step="1" value="20"></td><td><input type="number" id="H" step="any" value="20"></td></tr>
+      <tr><td>Length L (x)</td><td><input type="range" id="Lr" value="0.1"></td><td><input type="number" id="L" step="any" value="0.1"></td><td><select id="LU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
+      <tr><td>Width W (y)</td><td><input type="range" id="Wr" value="0.05"></td><td><input type="number" id="W" step="any" value="0.05"></td><td><select id="WU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
+      <tr><td>Height H (z)</td><td><input type="range" id="Hr" value="0.02"></td><td><input type="number" id="H" step="any" value="0.02"></td><td><select id="HU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
     </table>
     <svg id="sketch" class="sketch" viewBox="0 0 360 230"></svg>
     <div class="note" id="sketchNote"></div>
@@ -81,7 +81,7 @@
       <tr><td style="width:40%">Heat generated inside the block</td><td><input id="qgen" type="number" step="any" value="0"></td><td style="width:110px"><select id="qgenU"><option value="W">W total</option><option value="Wm3">W/m³</option></select></td></tr>
     </table>
     <div class="note">Fixed temperature: the face is held at that value. Heat flux: heat pushed into the face (a heater, a chip). Insulated: nothing crosses.
-      Convection: the face exchanges heat with a fluid at T<sub>∞</sub> through the coefficient h; tick radiation to add ε σ (T⁴ − T<sub>sur</sub>⁴).</div>
+      Convection: the face exchanges heat with a fluid at T<sub>∞</sub> through the coefficient h; tick radiation to add ε σ (T⁴ − T<sub>sur</sub>⁴), and sun to add absorbed sunlight α G (G ≈ 800 to 1000 W/m² in full sun).</div>
     <div style="margin-top:12px"><button id="solve" class="primary">Solve steady state</button> <span id="status" class="note" style="display:inline;margin-left:10px"></span></div>
   </div>
 
@@ -89,7 +89,7 @@
   <div class="card full" id="results" style="display:none">
     <h2>5. Results</h2>
     <div class="wrap" style="grid-template-columns:1fr 1fr; gap:14px">
-      <div><div id="view3d"></div><div class="note">Surface temperature. Drag to rotate, scroll to zoom.</div></div>
+      <div><div id="view3d"></div><div class="note">Surface temperature. Drag to rotate, scroll to zoom. Insulated faces are shown in gray.</div></div>
       <div>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
           <span style="font-size:.9rem">Slice through the block:</span>
@@ -140,7 +140,8 @@ function faceRow(key, label) {
       <span class="pf flux"><span class="lab">q =</span> <input class="q" type="number" step="any" value="5000"> <select class="qU"><option value="Wm2">W/m²</option><option value="W">W total</option><option value="btu">BTU/hr·ft²</option></select></span>
       <span class="pf conv"><span class="lab">h =</span> <input class="h" type="number" step="any" value="15"> <select class="hU"><option value="1">W/m²K</option><option value="5.678263">BTU/hr·ft²·°F</option></select>
         <span class="lab">T∞ =</span> <input class="Tinf" type="number" step="any" value="25">
-        <label class="lab"><input type="checkbox" class="rad"> radiation</label> <span class="pf rad"><span class="lab">ε =</span> <input class="eps" type="number" step="any" min="0" max="1" value="0.9"> <span class="lab">T<sub>sur</sub> =</span> <input class="Tsur" type="number" step="any" value="25"></span></span>
+        <label class="lab"><input type="checkbox" class="rad"> radiation</label> <span class="pf rad"><span class="lab">ε =</span> <input class="eps" type="number" step="any" min="0" max="1" value="0.9"> <span class="lab">T<sub>sur</sub> =</span> <input class="Tsur" type="number" step="any" value="25"></span>
+        <label class="lab"><input type="checkbox" class="sun"> sun</label> <span class="pf sun"><span class="lab">G =</span> <input class="G" type="number" step="any" value="800"> <span class="lab">W/m² absorptivity α =</span> <input class="alpha" type="number" step="any" min="0" max="1" value="0.6"></span></span>
     </td></tr>`;
 }
 $('faces').innerHTML = FACES.map(([k, l]) => faceRow(k, l)).join('');
@@ -148,12 +149,14 @@ function showParams(row) {
   const t = row.querySelector('.bc').value;
   row.querySelectorAll('.pf').forEach(p => p.style.display = 'none');
   row.querySelector('.pf.' + t).style.display = 'inline';
-  if (t === 'conv') row.querySelector('.pf.rad').style.display = row.querySelector('.rad').checked ? 'inline' : 'none';
+  if (t === 'conv') { row.querySelector('.pf.rad').style.display = row.querySelector('.rad').checked ? 'inline' : 'none';
+                      row.querySelector('.pf.sun').style.display = row.querySelector('.sun').checked ? 'inline' : 'none'; }
 }
 document.querySelectorAll('#faces tr').forEach(row => {
   row.querySelector('.bc').value = DEFAULT_BC[row.dataset.face];
   row.querySelector('.bc').addEventListener('change', () => { showParams(row); sketch(); });
   row.querySelector('.rad').addEventListener('change', () => showParams(row));
+  row.querySelector('.sun').addEventListener('change', () => showParams(row));
   showParams(row);
 });
 
@@ -161,16 +164,16 @@ document.querySelectorAll('#faces tr').forEach(row => {
 const toC = (v, u) => u === 'F' ? (v - 32) / 1.8 : u === 'K' ? v - 273.15 : v;
 const fromC = (c, u) => u === 'F' ? c * 1.8 + 32 : u === 'K' ? c + 273.15 : c;
 const tSym = () => ({C: '°C', F: '°F', K: 'K'})[$('tU').value];
-const dims = () => { const s = +$('lenU').value; return [+$('L').value * s, +$('W').value * s, +$('H').value * s]; };
+const dims = () => [+$('L').value * +$('LU').value, +$('W').value * +$('WU').value, +$('H').value * +$('HU').value];
 
 // sliders <-> boxes, per unit ranges
 const RANGES = {'0.001': [1, 500], '0.01': [0.5, 100], '1': [0.01, 5], '0.0254': [0.1, 60], '0.3048': [0.05, 10]};
-function setRanges() { const [lo, hi] = RANGES[$('lenU').value]; for (const d of ['L', 'W', 'H']) { const r = $(d + 'r'); r.min = lo; r.max = hi; r.step = (hi - lo) / 500; } }
+function setRanges() { for (const d of ['L', 'W', 'H']) { const [lo, hi] = RANGES[$(d + 'U').value], r = $(d + 'r'); r.min = lo; r.max = hi; r.step = (hi - lo) / 1000; r.value = +$(d).value; } }
 for (const d of ['L', 'W', 'H']) {
-  $(d + 'r').addEventListener('input', () => { $(d).value = (+$(d + 'r').value).toPrecision(4).replace(/\.?0+$/, ''); sketch(); });
+  $(d + 'r').addEventListener('input', () => { $(d).value = (+$(d + 'r').value).toPrecision(3).replace(/\.?0+$/, ''); sketch(); });
   $(d).addEventListener('input', () => { $(d + 'r').value = +$(d).value; sketch(); });
+  $(d + 'U').addEventListener('change', () => { setRanges(); sketch(); });
 }
-$('lenU').addEventListener('change', () => { setRanges(); for (const d of ['L', 'W', 'H']) $(d + 'r').value = +$(d).value; sketch(); });
 document.querySelectorAll('input[name=grid]').forEach(r => r.addEventListener('change', sketch));
 setRanges();
 
@@ -195,15 +198,15 @@ function sketch() {
   const poly = (pts, f) => `<polygon points="${pts.map(p => P(...p).join(',')).join(' ')}" fill="${FACE_COLOR[bc(f)]}" fill-opacity=".55" stroke="#1c2733" stroke-width="1.2"/>`;
   const top = poly([[0, 0, az], [ax, 0, az], [ax, ay, az], [0, ay, az]], '+z');
   const front = poly([[0, 0, 0], [ax, 0, 0], [ax, 0, az], [0, 0, az]], '-y');
-  const right = poly([[ax, 0, 0], [ax, ay, 0], [ax, ay, az], [ax, 0, az]], '+x');
+  const left = poly([[0, 0, 0], [0, ay, 0], [0, ay, az], [0, 0, az]], '-x');
   const lab = (p, t) => `<text x="${P(...p)[0]}" y="${P(...p)[1]}" font-size="11" text-anchor="middle" fill="#1c2733">${t}</text>`;
   const legend = Object.entries({fixed: 'fixed T', flux: 'heat in', insulated: 'insulated', conv: 'convection'}).map(([k, t], i) =>
     `<rect x="${8 + i * 88}" y="212" width="10" height="10" fill="${FACE_COLOR[k]}" fill-opacity=".7"/><text x="${22 + i * 88}" y="221" font-size="10" fill="#66768a">${t}</text>`).join('');
-  $('sketch').innerHTML = front + right + top + lab([ax / 2, -14, -6], 'L') + lab([ax + 14, ay / 2, -6], 'W') + lab([-12, -8, az / 2], 'H') + legend;
+  $('sketch').innerHTML = left + front + top + lab([ax / 2, -16, -8], 'L') + lab([-16, ay / 2, -8], 'W') + lab([ax + 14, -6, az / 2], 'H') + legend;
   const n = gridSize();
   $('gridNote').textContent = `${n[0]} × ${n[1]} × ${n[2]} cells = ${(n[0] * n[1] * n[2]).toLocaleString()} (sized from the block proportions; the longest side gets the most cells)`;
   $('sketchNote').innerHTML = (clamped ? '<span class="warn">Sketch not to scale (very thin block); the calculation uses the true dimensions.</span> ' : '') +
-    'Visible: top, front, and right faces, colored by their boundary condition.';
+    'Visible: top, front (y = 0), and left (x = 0) faces, colored by their boundary condition.';
 }
 sketch();
 
@@ -217,7 +220,8 @@ function readBCs() {
     else if (t === 'flux') { const u = row.querySelector('.qU').value; out[f] = {type: t, q: u === 'W' ? g('.q') / areas[f] : u === 'btu' ? g('.q') * 3.154591 : g('.q')}; }
     else if (t === 'insulated') out[f] = {type: t};
     else out[f] = {type: t, h: g('.h') * +row.querySelector('.hU').value, Tinf: toC(g('.Tinf'), tu),
-                   eps: row.querySelector('.rad').checked ? g('.eps') : 0, Tsur: toC(g('.Tsur'), tu)};
+                   eps: row.querySelector('.rad').checked ? g('.eps') : 0, Tsur: toC(g('.Tsur'), tu),
+                   solar: row.querySelector('.sun').checked ? g('.G') * g('.alpha') : 0};   // absorbed W/m^2
   });
   return out;
 }
@@ -242,7 +246,7 @@ function assemble(n, d, k, faces, qgen, T) {
         let h = bc.h;
         if (bc.eps > 0) { const Tk = T[a] + 273.15, Ts = bc.Tsur + 273.15; h += bc.eps * SIG * (Tk + Ts) * (Tk * Tk + Ts * Ts); }
         const G = h > 0 ? 1 / (1 / (h * A[f]) + 1 / Gh) : 0;
-        diag[a] += G; rhs[a] += G * bc.Tinf;
+        diag[a] += G; rhs[a] += G * bc.Tinf + (bc.solar || 0) * A[f];   // absorbed sunlight is a heat source on the face
       }
     }
   }
@@ -292,13 +296,14 @@ $('solve').addEventListener('click', () => {
   setTimeout(() => {
     let T = new Float64Array(N).fill(25), its = 0;
     const anyRad = Object.values(faces).some(b => b.type === 'conv' && b.eps > 0);
+    let converged = true;
     for (let pic = 0; pic < (anyRad ? 12 : 1); pic++) {
-      const sys = assemble(n, d, k, faces, qgen, T); const r = cg(sys, T); its += r.it;
+      const sys = assemble(n, d, k, faces, qgen, T); const r = cg(sys, T); its += r.it; if (r.it >= 5000) converged = false;
       let dmax = 0; for (let i = 0; i < N; i++) dmax = Math.max(dmax, Math.abs(r.x[i] - T[i])); T = r.x;
       if (dmax < 1e-4) break;
     }
     RES = {T, n, d, dims: [Lx, Ly, Lz], k, faces, qgen, sys: assemble(n, d, k, faces, qgen, T)};
-    $('status').textContent = `done: ${N.toLocaleString()} cells, ${its} solver iterations`;
+    $('status').innerHTML = converged ? `done: ${N.toLocaleString()} cells, ${its} solver iterations` : `<span class="err">the solver did not converge; try a coarser grid or check the inputs</span>`;
     $('results').style.display = '';
     showResults();
   }, 30);
@@ -317,7 +322,7 @@ function faceTemps(f) {
     if (bc.type === 'fixed') q = Gh * (Tc - bc.T);
     else if (bc.type === 'flux') q = -bc.q * sys.A[f];
     else if (bc.type === 'conv') { let h = bc.h; if (bc.eps > 0) { const Tk = Tc + 273.15, Ts = bc.Tsur + 273.15; h += bc.eps * SIG * (Tk + Ts) * (Tk * Tk + Ts * Ts); }
-      const G = h > 0 ? 1 / (1 / (h * sys.A[f]) + 1 / Gh) : 0; q = G * (Tc - bc.Tinf); }
+      const G = h > 0 ? 1 / (1 / (h * sys.A[f]) + 1 / Gh) : 0; q = G * (Tc - bc.Tinf) - (bc.solar || 0) * sys.A[f]; }
     row.push(Tc - q / Gh); Qtot += q; } out.push(row); }
   return {grid: out, Qout: Qtot};
 }
@@ -325,7 +330,9 @@ function showResults() {
   const {T, n, d, dims: [Lx, Ly, Lz], k, faces, qgen} = RES, tu = $('tU').value, [nx, ny, nz] = n;
   let Tmin = Infinity, Tmax = -Infinity, Tsum = 0; for (const v of T) { Tmin = Math.min(Tmin, v); Tmax = Math.max(Tmax, v); Tsum += v; }
   // 3D: six faces painted with their temperature
-  const cx = Array.from({length: nx}, (_, i) => (i + .5) * d[0]), cy = Array.from({length: ny}, (_, j) => (j + .5) * d[1]), cz = Array.from({length: nz}, (_, l) => (l + .5) * d[2]);
+  // cell-centre positions, with the first and last stretched to the block edges so the faces meet
+  const span = (n, d, L) => Array.from({length: n}, (_, i) => i === 0 ? 0 : i === n - 1 ? L : (i + .5) * d);
+  const cx = span(nx, d[0], Lx), cy = span(ny, d[1], Ly), cz = span(nz, d[2], Lz);
   const traces = [], flows = {};
   for (const [f] of FACES) {
     const ft = faceTemps(f); flows[f] = ft.Qout;
@@ -335,9 +342,11 @@ function showResults() {
     if (ax === 'x') { X = cz.map(() => cy.map(() => at)); Y = cz.map(() => cy); Z = cz.map(z => cy.map(() => z)); }
     else if (ax === 'y') { X = cz.map(() => cx); Y = cz.map(() => cx.map(() => at)); Z = cz.map(z => cx.map(() => z)); }
     else { X = cy.map(() => cx); Y = cy.map(y => cx.map(() => y)); Z = cy.map(() => cx.map(() => at)); }
-    traces.push({type: 'surface', x: X, y: Y, z: Z, surfacecolor: g, colorscale: 'Jet', cmin: fromC(Tmin, tu), cmax: fromC(Tmax, tu), showscale: f === '+z',
+    const ins = faces[f].type === 'insulated';
+    traces.push({type: 'surface', x: X, y: Y, z: Z, surfacecolor: g, colorscale: ins ? [[0, '#c9cfd6'], [1, '#6d7680']] : 'Jet', cmin: fromC(Tmin, tu), cmax: fromC(Tmax, tu), showscale: f === '+z' && !ins,
                  colorbar: {title: tSym(), len: .7}, name: f, text: g.map(r => r.map(v => v.toFixed(1) + ' ' + tSym())), hovertemplate: '%{text}<extra></extra>'});
   }
+  if (Object.values(faces).some(b => b.type === 'insulated')) { const f0 = FACES.find(([f]) => faces[f].type !== 'insulated'); if (f0) traces[FACES.findIndex(([f]) => f === f0[0])].showscale = true; }
   const Lm = Math.max(Lx, Ly, Lz), asp = [Lx, Ly, Lz].map(v => Math.max(v / Lm, 0.12));
   Plotly.react('view3d', traces, {scene: {xaxis: {title: 'x'}, yaxis: {title: 'y'}, zaxis: {title: 'z'}, aspectmode: 'manual', aspectratio: {x: asp[0], y: asp[1], z: asp[2]},
     camera: {eye: {x: 1.6, y: -1.6, z: 1.1}}}, margin: {l: 0, r: 0, t: 10, b: 0}}, {responsive: true, displaylogo: false});
@@ -345,13 +354,13 @@ function showResults() {
   // energy balance and summary
   const Qout = Object.values(flows).reduce((s, v) => s + v, 0);
   const areaOf = {'-x': Ly * Lz, '+x': Ly * Lz, '-y': Lx * Lz, '+y': Lx * Lz, '-z': Lx * Ly, '+z': Lx * Ly};
-  const Qflux = Object.entries(faces).filter(([f, b]) => b.type === 'flux').reduce((s, [f, b]) => s + b.q * areaOf[f], 0);
+  const Qflux = Object.entries(faces).reduce((s, [f, b]) => s + (b.type === 'flux' ? b.q : (b.solar || 0)) * areaOf[f], 0);
   const vol = Lx * Ly * Lz, area = 2 * (Lx * Ly + Lx * Lz + Ly * Lz);
   const hmax = Math.max(0, ...Object.values(faces).filter(b => b.type === 'conv').map(b => b.h));
   const bi = hmax * (vol / area) / k;
-  const rowsHtml = FACES.map(([f, lab]) => `<tr><td>${lab}</td><td>${{fixed: 'fixed T', flux: 'heat in', insulated: 'insulated', conv: 'convection' + (faces[f].eps > 0 ? ' + radiation' : '')}[faces[f].type]}</td><td style="text-align:right"><b>${flows[f] >= 0 ? '' : '−'}${Math.abs(flows[f]).toPrecision(4)} W</b> ${flows[f] >= 0 ? 'out' : 'in'}</td></tr>`).join('');
+  const rowsHtml = FACES.map(([f, lab]) => `<tr><td>${lab}</td><td>${{fixed: 'fixed T', flux: 'heat in', insulated: 'insulated', conv: 'convection' + (faces[f].eps > 0 ? ' + radiation' : '') + (faces[f].solar > 0 ? ' + sun' : '')}[faces[f].type]}</td><td style="text-align:right"><b>${flows[f] >= 0 ? '' : '−'}${Math.abs(flows[f]).toPrecision(4)} W</b> ${flows[f] >= 0 ? 'out' : 'in'}</td></tr>`).join('');
   $('stats').innerHTML = `Temperature: min <b>${fromC(Tmin, tu).toFixed(1)}</b>, max <b>${fromC(Tmax, tu).toFixed(1)}</b>, average <b>${fromC(Tsum / T.length, tu).toFixed(1)} ${tSym()}</b>.
-    &nbsp; Heat in: <b>${(qgen * vol + Qflux).toPrecision(4)} W</b> (generation ${(qgen * vol).toPrecision(3)} W + heat-flux faces ${Qflux.toPrecision(3)} W). &nbsp; Heat out through fixed-temperature and convection faces: <b>${(Qout + Qflux).toPrecision(4)} W</b>
+    &nbsp; Heat in: <b>${(qgen * vol + Qflux).toPrecision(4)} W</b> (generation ${(qgen * vol).toPrecision(3)} W + heat-flux and sunlit faces ${Qflux.toPrecision(3)} W). &nbsp; Heat out through fixed-temperature and convection faces: <b>${(Qout + Qflux).toPrecision(4)} W</b>
     <span class="note" style="display:inline">(in = out at steady state, to solver tolerance)</span>.<br>
     Biot number with the largest h: <b>${bi.toExponential(2)}</b> ${bi < 0.1 ? '(below 0.1: the block is nearly uniform in temperature; a lumped estimate would have been fine)' : '(above 0.1: internal gradients matter; this 3D solution is needed)'}.
     <table class="in" style="margin-top:8px;max-width:560px"><tr><th style="text-align:left">Face</th><th style="text-align:left">Condition</th><th style="text-align:right">Heat flow</th></tr>${rowsHtml}</table>`;
@@ -364,7 +373,7 @@ function showSlice() {
   if (ax === 'x') { const i = Math.min(nx - 1, Math.floor(s * nx)); pos = cx[i]; xs = cy; ys = cz; xl = 'y'; yl = 'z'; z = cz.map((_, l) => cy.map((_, j) => fromC(T[(l * ny + j) * nx + i], tu))); }
   else if (ax === 'y') { const j = Math.min(ny - 1, Math.floor(s * ny)); pos = cy[j]; xs = cx; ys = cz; xl = 'x'; yl = 'z'; z = cz.map((_, l) => cx.map((_, i) => fromC(T[(l * ny + j) * nx + i], tu))); }
   else { const l = Math.min(nz - 1, Math.floor(s * nz)); pos = cz[l]; xs = cx; ys = cy; xl = 'x'; yl = 'y'; z = cy.map((_, j) => cx.map((_, i) => fromC(T[(l * ny + j) * nx + i], tu))); }
-  const u = +$('lenU').value, un = $('lenU').options[$('lenU').selectedIndex].text;
+  const u = +$('LU').value, un = $('LU').options[$('LU').selectedIndex].text;
   $('sliceLab').textContent = `${ax} = ${(pos / u).toPrecision(3)} ${un}`;
   Plotly.react('slice', [{type: 'heatmap', x: xs.map(v => v / u), y: ys.map(v => v / u), z, colorscale: 'Jet', colorbar: {title: tSym()}, hovertemplate: `${xl} = %{x:.3g}, ${yl} = %{y:.3g}<br>T = %{z:.1f}<extra></extra>`}],
     {xaxis: {title: `${xl} (${un})`}, yaxis: {title: `${yl} (${un})`, scaleanchor: 'x'}, margin: {l: 50, r: 10, t: 10, b: 45}}, {responsive: true, displaylogo: false});
