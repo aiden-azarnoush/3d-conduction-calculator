@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3D Conduction Calculator</title>
+<title>3D Steady-State Heat Transfer Calculator</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
   :root { --ink:#1c2733; --muted:#66768a; --blue:#1f5fbf; --orange:#d3541f; --green:#2a9d5c; --red:#b00020; --bg:#f6f8fb; }
@@ -12,7 +12,7 @@
   h1 { text-align:center; font-size:1.5rem; margin:0 0 4px; }
   h2 { font-size:1.02rem; margin:0 0 10px; }
   .sub { text-align:center; color:var(--muted); font-size:.92rem; margin-bottom:18px; }
-  .wrap { max-width:1240px; margin:0 auto; display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .wrap { max-width:1240px; margin:0 auto; display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1.15fr); gap:18px; align-items:start; }
   .card { background:#fff; border-radius:12px; padding:16px 18px; box-shadow:0 2px 12px rgba(0,0,0,.07); }
   .full { grid-column:1 / -1; }
   table.in { width:100%; border-collapse:collapse; }
@@ -20,9 +20,6 @@
   input[type=number], select { padding:6px 8px; font-size:.95rem; border:1px solid #c9d4e0; border-radius:6px; width:100%; }
   input[type=range] { width:100%; }
   .dim td:nth-child(1) { width:26%; } .dim td:nth-child(2) { width:34%; } .dim td:nth-child(3) { width:22%; } .dim td:nth-child(4) { width:18%; }
-  .faces td.p { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
-  .faces td.p > * { width:auto; min-width:70px; }
-  .faces .lab { font-size:.8rem; color:var(--muted); }
   .note { color:var(--muted); font-size:.82rem; line-height:1.45; margin-top:8px; }
   .warn { color:var(--orange); font-weight:600; }
   .err { color:var(--red); font-weight:600; }
@@ -38,68 +35,138 @@
   footer a { color:#1f5fbf; text-decoration:none; margin:0 8px; white-space:nowrap; }
   footer a:hover { text-decoration:underline; }
   footer svg { width:16px; height:16px; vertical-align:-3px; margin-right:4px; }
-  @media (max-width:900px) { .wrap { grid-template-columns:1fr; } }
+  .setup-stack { display:grid; gap:18px; min-width:0; }
+  .card { min-width:0; border:1px solid #e5eaf1; box-shadow:0 3px 16px rgba(27,48,75,.04); }
+  h2 { display:flex; align-items:center; gap:9px; margin-bottom:16px; }
+  .step { display:inline-grid; place-items:center; width:26px; height:26px; flex:none; border-radius:8px; background:#edf3fc; color:var(--blue); font-size:.82rem; }
+  .sub { max-width:780px; margin:8px auto 24px; line-height:1.6; }
+  input, select { accent-color:var(--blue); }
+  input[type=number], select { min-width:0; min-height:36px; background:#fff; color:var(--ink); }
+  input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible { outline:3px solid #91b8ed; outline-offset:3px; }
+  .section-intro { font-size:.86rem; color:var(--muted); line-height:1.5; margin:-5px 0 14px; }
+  .face-panel { border:1px solid #dfe6ef; border-left:3px solid var(--face-color); border-radius:9px; margin-top:9px; overflow:hidden; }
+  .face-panel summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:10px; padding:12px; }
+  .face-panel summary::-webkit-details-marker { display:none; }
+  .face-panel summary::after { content:'+'; color:var(--muted); margin-left:auto; font-size:1.2rem; }
+  .face-panel[open] summary::after { content:'−'; }
+  .face-panel summary:hover { background:#f6f9fd; }
+  .face-panel[open] summary { background:#f6f9fd; border-bottom:1px solid #e5eaf1; }
+  .face-name { font-size:.9rem; font-weight:600; }
+  .face-location { color:var(--muted); font-size:.76rem; font-weight:400; margin-left:6px; }
+  .face-overview { flex:1; min-width:0; }
+  .face-summary { display:block; color:var(--muted); font-size:.76rem; margin-top:4px; line-height:1.4; }
+  .condition-badge { background:#edf2f7; border-radius:5px; padding:4px 7px; font-size:.71rem; font-weight:600; white-space:nowrap; }
+  .face-body { padding:14px; }
+  .field-label { display:block; font-size:.78rem; font-weight:600; margin-bottom:6px; }
+  .input-unit { display:flex; gap:5px; align-items:center; }
+  .input-unit input { flex:1; width:0; }
+  .input-unit select { width:auto; max-width:65%; }
+  .unit { color:var(--muted); font-size:.8rem; white-space:nowrap; }
+  .field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .parameter-group { margin-top:14px; }
+  .parameter-group[hidden] { display:none; }
+  .condition-help { margin:10px 0 0; font-size:.8rem; color:var(--muted); line-height:1.5; }
+  .extras { display:flex; flex-wrap:wrap; gap:9px 18px; margin-top:14px; padding-top:12px; border-top:1px solid #e5eaf1; }
+  .extras label { display:flex; align-items:center; gap:6px; font-size:.83rem; cursor:pointer; }
+  .extras input { margin:0; width:16px; height:16px; }
+  .extra-fields { border-radius:7px; padding:12px; background:#f6f9fd; }
+  .generation { margin-top:18px; padding-top:16px; border-top:1px solid #e5eaf1; }
+  .generation .input-unit { max-width:320px; }
+  .solve-row { margin-top:18px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .solve-row label { font-size:.8rem; color:var(--muted); }
+  .solve-row select { width:auto; margin-left:5px; }
+  #status { width:100%; margin:0; }
+  .grid-options { display:flex; flex-wrap:wrap; gap:8px; }
+  .grid-options .opt { flex:1; margin:0; padding:9px; border:1px solid #dfe6ef; border-radius:7px; text-align:center; font-size:.85rem; cursor:pointer; }
+  .grid-options .opt:has(:checked) { color:var(--blue); background:#edf3fc; border-color:#91b8ed; }
+  .results-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+  .results-grid > div { min-width:0; }
+  .slice-controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:6px; font-size:.85rem; }
+  .slice-controls select { width:auto; }
+  .slice-position { display:flex; align-items:center; gap:10px; width:100%; }
+  .slice-position input { flex:1; min-width:70px; }
+  #sliceLab { min-width:90px; text-align:right; }
+  @media (max-width:1000px) { .wrap, .results-grid { grid-template-columns:1fr; } }
+  @media (max-width:540px) {
+    body { padding:18px 10px; } h1 { font-size:1.3rem; } .card { padding:14px 12px; }
+    .field-grid { grid-template-columns:1fr; } .face-location { display:block; margin:3px 0 0; }
+    .condition-badge { max-width:105px; white-space:normal; text-align:center; }
+    .dim td { padding:7px 3px !important; font-size:.8rem !important; }
+    .dim td:nth-child(1) { width:30%; } .dim td:nth-child(2) { width:24%; }
+    .dim td:nth-child(3) { width:24%; } .dim td:nth-child(4) { width:22%; }
+    .dim input, .dim select { padding:6px 3px; font-size:.85rem; }
+    #view3d, #slice { height:340px; }
+  }
 </style>
 </head>
 <body>
-<h1>3D Conduction Calculator</h1>
-<div class="sub">Steady heat conduction in a rectangular block with heat sources, insulation, convection, and radiation on any face, solved by the finite-volume method in your browser.</div>
+<h1>3D Steady-State Heat Transfer Calculator</h1>
+<div class="sub">Conduction through a rectangular block, with convection, radiation, and solar heating at its surfaces.</div>
 
 <div class="wrap">
+  <div class="setup-stack">
   <!-- ------------------------------------------------------------ 1 geometry -->
   <div class="card">
-    <h2>1. The block</h2>
+    <h2><span class="step">1</span> Dimensions</h2>
     <table class="in dim">
-      <tr><td>Length L (x)</td><td><input type="range" id="Lr" value="0.1"></td><td><input type="number" id="L" step="any" value="0.1"></td><td><select id="LU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
-      <tr><td>Width W (y)</td><td><input type="range" id="Wr" value="0.05"></td><td><input type="number" id="W" step="any" value="0.05"></td><td><select id="WU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
-      <tr><td>Height H (z)</td><td><input type="range" id="Hr" value="0.02"></td><td><input type="number" id="H" step="any" value="0.02"></td><td><select id="HU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
+      <tr><td>Length L (x)</td><td><input type="range" aria-label="Length slider" id="Lr" value="0.1"></td><td><input type="number" aria-label="Length" id="L" step="any" value="0.1"></td><td><select aria-label="Length units" id="LU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
+      <tr><td>Width W (y)</td><td><input type="range" aria-label="Width slider" id="Wr" value="0.05"></td><td><input type="number" aria-label="Width" id="W" step="any" value="0.05"></td><td><select aria-label="Width units" id="WU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
+      <tr><td>Height H (z)</td><td><input type="range" aria-label="Height slider" id="Hr" value="0.02"></td><td><input type="number" aria-label="Height" id="H" step="any" value="0.02"></td><td><select aria-label="Height units" id="HU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
     </table>
     <svg id="sketch" class="sketch" viewBox="0 0 480 360" style="max-width:520px;cursor:grab"></svg>
     <div class="note" id="sketchNote"></div>
   </div>
 
+  <div class="card">
+    <h2><span class="step">2</span> Material Properties</h2>
+    <label class="field-label" for="mat">Material</label>
+    <select id="mat"></select>
+    <div style="margin-top:14px">
+      <label class="field-label" for="k">Thermal conductivity · k</label>
+      <div class="input-unit"><input id="k" type="number" step="any"><select id="kU" aria-label="Thermal conductivity units"><option value="1">W/m·K</option><option value="1.730735">BTU/hr·ft·°F</option></select></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">3</span> Grid</h2>
+    <div class="grid-options">
+    <label class="opt"><input type="radio" name="grid" value="16"> Coarse</label>
+    <label class="opt"><input type="radio" name="grid" value="28" checked> Medium</label>
+    <label class="opt"><input type="radio" name="grid" value="40"> Fine</label>
+    </div>
+    <div class="note" id="gridNote"></div>
+  </div>
+
+  </div>
   <!-- ------------------------------------------------------------ 4 boundary conditions -->
   <div class="card">
-    <h2>4. What happens on each face</h2>
-    <table class="in faces" id="faces"></table>
-    <table class="in" style="margin-top:6px">
-      <tr><td style="width:40%">Heat generated inside the block</td><td><input id="qgen" type="number" step="any" value="0"></td><td style="width:110px"><select id="qgenU"><option value="W">W total</option><option value="Wm3">W/m³</option></select></td></tr>
-    </table>
-    <div class="note">Fixed temperature: the face is held at that value. Heat flux: heat pushed into the face (a heater, a chip). Insulated: nothing crosses.
-      Convection: the face exchanges heat with a fluid at T<sub>∞</sub> through the coefficient h; tick radiation to add ε σ (T⁴ − T<sub>sur</sub>⁴), and sun to add absorbed sunlight α G (G ≈ 800 to 1000 W/m² in full sun).</div>
-    <div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button id="solve" class="primary">Solve steady state</button>
-      <span class="note" style="margin:0">show results in</span> <select id="tU" style="width:auto"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select>
-      <span id="status" class="note" style="margin:0"></span></div>
-  </div>
-
-  <div class="card">
-    <h2>2. Material</h2>
-    <table class="in">
-      <tr><td style="width:40%">Material</td><td colspan="2"><select id="mat"></select></td></tr>
-      <tr><td>Thermal conductivity k</td><td><input id="k" type="number" step="any"></td><td style="width:150px"><select id="kU"><option value="1">W/m·K</option><option value="1.730735">BTU/hr·ft·°F</option></select></td></tr>
-    </table>
-  </div>
-
-  <div class="card">
-    <h2>3. Grid</h2>
-    <label class="opt"><input type="radio" name="grid" value="16"> coarse</label>
-    <label class="opt"><input type="radio" name="grid" value="28" checked> medium</label>
-    <label class="opt"><input type="radio" name="grid" value="40"> fine</label>
-    <div class="note" id="gridNote"></div>
+    <h2><span class="step">4</span> Boundary Conditions</h2>
+    <p class="section-intro">Choose how each face exchanges heat. Open a face to edit its condition and values.</p>
+    <div class="faces" id="faces"></div>
+    <div class="generation">
+      <label class="field-label" for="qgen">Internal heat generation</label>
+      <div class="input-unit"><input id="qgen" type="number" step="any" value="0"><select id="qgenU" aria-label="Internal heat generation units"><option value="W">W total</option><option value="Wm3">W/m³</option></select></div>
+      <div class="note">Heat generated throughout the block. Leave at 0 if there is none.</div>
+    </div>
+    <div class="solve-row"><button id="solve" class="primary">Solve steady state</button>
+      <label for="tU">Results in <select id="tU"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select></label>
+      <span id="status" class="note" role="status" aria-live="polite"></span>
+    </div>
   </div>
 
   <!-- ------------------------------------------------------------ results -->
   <div class="card full" id="results" style="display:none">
-    <h2>5. Results</h2>
-    <div class="wrap" style="grid-template-columns:1fr 1fr; gap:14px">
+    <h2><span class="step">5</span> Results</h2>
+    <div class="results-grid">
       <div><div id="view3d"></div><div class="note">Surface temperature. Drag to rotate, scroll to zoom. Insulated faces are shown in gray.</div></div>
       <div>
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
-          <span style="font-size:.9rem">Slice through the block:</span>
+        <div class="slice-controls">
+          <label for="sliceAxis">Slice through the block:</label>
           <select id="sliceAxis" style="width:auto"><option value="x">plane x = const</option><option value="y">plane y = const</option><option value="z" selected>plane z = const</option></select>
-          <input id="slicePos" type="range" min="0" max="1" step="0.01" value="0.5" style="flex:1">
-          <span id="sliceLab" style="font-size:.9rem;white-space:nowrap"></span>
+          <div class="slice-position"><label for="slicePos">Position</label><input id="slicePos" type="range" min="0" max="1" step="0.01" value="0.5" style="flex:1">
+          <span id="sliceLab" style="font-size:.9rem;white-space:nowrap"></span></div>
         </div>
+        <div class="note">Move the slider to inspect a parallel slice inside the block.</div>
         <div id="slice"></div>
       </div>
     </div>
@@ -109,7 +176,7 @@
 
 <footer>
   Written by <b>Aiden Azarnoush</b><br>
-  <a href="https://github.com/aiden-azarnoush/3d-conduction-calculator"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3 1 8l4.5 5 1-1L2.9 8l3.6-4zM10.5 3l-1 1L13.1 8l-3.6 4 1 1L15 8z"/></svg>source on GitHub</a>
+  <a href="https://github.com/aiden-azarnoush/3d-steady-state-heat-transfer-calculator"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3 1 8l4.5 5 1-1L2.9 8l3.6-4zM10.5 3l-1 1L13.1 8l-3.6 4 1 1L15 8z"/></svg>source on GitHub</a>
   <a href="https://github.com/aiden-azarnoush"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM8 4a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zm0 6c-2 0-3.5 1-3.5 2v.3A5.5 5.5 0 0 0 8 13.5a5.5 5.5 0 0 0 3.5-1.2V12c0-1-1.5-2-3.5-2z"/></svg>all my repositories</a>
   <a href="https://aiden-azarnoush.github.io"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm4.9 6h-2.1a11 11 0 0 0-.9-3.6A5.5 5.5 0 0 1 12.9 7zM8 2.5c.7.8 1.4 2.3 1.6 4.5H6.4c.2-2.2.9-3.7 1.6-4.5zM3.1 7a5.5 5.5 0 0 1 3-3.6c-.4 1-.7 2.3-.9 3.6H3.1zm0 2h2.1c.2 1.3.5 2.6.9 3.6A5.5 5.5 0 0 1 3.1 9zM8 13.5c-.7-.8-1.4-2.3-1.6-4.5h3.2c-.2 2.2-.9 3.7-1.6 4.5zm1.9-.9c.4-1 .7-2.3.9-3.6h2.1a5.5 5.5 0 0 1-3 3.6z"/></svg>aiden-azarnoush.github.io</a>
   <div style="margin-top:6px">Found this useful? <a href="https://paypal.me/azarnoush">☕ Buy me a coffee</a> &nbsp;
@@ -136,30 +203,73 @@ const FACES = [['-x', 'Left face (x = 0)'], ['+x', 'Right face (x = L)'], ['-y',
 const FACE_COLOR = {fixed: '#8e6bbf', flux: '#d3541f', insulated: '#9aa7b5', conv: '#1f5fbf'};
 const DEFAULT_BC = {'-x': 'conv', '+x': 'conv', '-y': 'conv', '+y': 'conv', '-z': 'flux', '+z': 'conv'};
 function faceRow(key, label) {
-  return `<tr data-face="${key}"><td style="width:26%">${label}</td>
-    <td style="width:22%"><select class="bc"><option value="fixed">fixed temperature</option><option value="flux">heat flux in</option><option value="insulated">insulated</option><option value="conv">convection</option></select></td>
-    <td class="p">
-      <span class="pf fixed"><span class="lab">T =</span> <input class="Tfix" type="number" step="any" value="100"> <select class="TfixU" style="width:auto"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select></span>
-      <span class="pf flux"><span class="lab">q =</span> <input class="q" type="number" step="any" value="5000"> <select class="qU"><option value="Wm2">W/m²</option><option value="W">W total</option><option value="btu">BTU/hr·ft²</option></select></span>
-      <span class="pf conv"><span class="lab">h =</span> <input class="h" type="number" step="any" value="15"> <select class="hU"><option value="1">W/m²K</option><option value="5.678263">BTU/hr·ft²·°F</option></select>
-        <span class="lab">T∞ =</span> <input class="Tinf" type="number" step="any" value="25"> <select class="TinfU" style="width:auto"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select>
-        <label class="lab"><input type="checkbox" class="rad"> radiation</label> <span class="pf rad"><span class="lab">ε =</span> <input class="eps" type="number" step="any" min="0" max="1" value="0.9"> <span class="lab">T<sub>sur</sub> =</span> <input class="Tsur" type="number" step="any" value="25"> <select class="TsurU" style="width:auto"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select></span>
-        <label class="lab"><input type="checkbox" class="sun"> sun</label> <span class="pf sun"><span class="lab">G =</span> <input class="G" type="number" step="any" value="800"> <span class="lab">W/m² absorptivity α =</span> <input class="alpha" type="number" step="any" min="0" max="1" value="0.6"></span></span>
-    </td></tr>`;
+  const id = key.replace('-', 'minus').replace('+', 'plus');
+  const [name, location] = label.split(' (');
+  const tempUnits = '<option value="C">°C</option><option value="F">°F</option><option value="K">K</option>';
+  const field = (cls, title, value, units = '', attrs = '') => `<div>
+    <label class="field-label" for="${id}-${cls}">${title}</label>
+    <div class="input-unit"><input id="${id}-${cls}" class="${cls}" type="number" step="any" value="${value}" ${attrs}>
+    ${units ? `<select class="${cls}U" aria-label="${name}: ${title} units">${units}</select>` : ''}</div></div>`;
+  return `<details class="face-panel" data-face="${key}" ${key === '-x' ? 'open' : ''}>
+    <summary><div class="face-overview"><span class="face-name">${name}</span> <span class="face-location">${location.slice(0, -1)}</span><span class="face-summary"></span></div><span class="condition-badge"></span></summary>
+    <div class="face-body">
+      <label class="field-label" for="${id}-bc">Boundary condition</label>
+      <select id="${id}-bc" class="bc"><option value="fixed">Fixed temperature</option><option value="flux">Heat flux in</option><option value="insulated">Insulated</option><option value="conv">Convection</option></select>
+      <div class="parameter-group" data-condition="fixed">
+        ${field('Tfix', 'Face temperature', 100, tempUnits)}
+        <p class="condition-help">The entire face is held at this temperature.</p>
+      </div>
+      <div class="parameter-group" data-condition="flux">
+        ${field('q', 'Heat input', 5000, '<option value="Wm2">W/m²</option><option value="W">W total</option><option value="btu">BTU/hr·ft²</option>')}
+        <p class="condition-help">Positive values add heat to this face; negative values remove it.</p>
+      </div>
+      <div class="parameter-group" data-condition="insulated"><p class="condition-help">No heat crosses this face. There are no additional settings.</p></div>
+      <div class="parameter-group" data-condition="conv">
+        <div class="field-grid">
+          ${field('h', 'Convection coefficient · h', 15, '<option value="1">W/m²·K</option><option value="5.678263">BTU/hr·ft²·°F</option>', 'min="0"')}
+          ${field('Tinf', 'Fluid temperature · T∞', 25, tempUnits)}
+        </div>
+        <p class="condition-help">Heat exchange with the surrounding air or fluid.</p>
+        <div class="extras"><label><input type="checkbox" class="rad"> Radiation</label><label><input type="checkbox" class="sun"> Solar heating</label></div>
+        <div class="parameter-group extra-fields" data-extra="rad">
+          <div class="field-grid">${field('eps', 'Emissivity · ε', 0.9, '', 'min="0" max="1"')}${field('Tsur', 'Surroundings temperature', 25, tempUnits)}</div>
+          <p class="condition-help">Thermal radiation to the surroundings. Emissivity ranges from 0 to 1.</p>
+        </div>
+        <div class="parameter-group extra-fields" data-extra="sun">
+          <div class="field-grid">${field('G', 'Solar irradiance · G (W/m²)', 800, '', 'min="0"')}${field('alpha', 'Solar absorptivity · α', 0.6, '', 'min="0" max="1"')}</div>
+          <p class="condition-help">Absorbed sunlight = α × G. Absorptivity ranges from 0 to 1.</p>
+        </div>
+      </div>
+    </div>
+  </details>`;
 }
 $('faces').innerHTML = FACES.map(([k, l]) => faceRow(k, l)).join('');
+function updateFaceSummary(row) {
+  const value = c => row.querySelector('.' + c).value;
+  const unit = c => { const el = row.querySelector('.' + c); return el.options[el.selectedIndex].text; };
+  const t = value('bc');
+  let summary = {fixed: () => `${value('Tfix')} ${unit('TfixU')}`,
+    flux: () => `${value('q')} ${unit('qU')}`,
+    insulated: () => 'No heat flow',
+    conv: () => `h = ${value('h')} ${unit('hU')} · Fluid ${value('Tinf')} ${unit('TinfU')}`}[t]();
+  if (t === 'conv') {
+    if (row.querySelector('.rad').checked) summary += ' · Radiation';
+    if (row.querySelector('.sun').checked) summary += ' · Solar';
+  }
+  row.querySelector('.condition-badge').textContent = unit('bc');
+  row.querySelector('.face-summary').textContent = summary;
+  row.style.setProperty('--face-color', FACE_COLOR[t]);
+}
 function showParams(row) {
   const t = row.querySelector('.bc').value;
-  row.querySelectorAll('.pf').forEach(p => p.style.display = 'none');
-  row.querySelector('.pf.' + t).style.display = 'inline';
-  if (t === 'conv') { row.querySelector('.pf.rad').style.display = row.querySelector('.rad').checked ? 'inline' : 'none';
-                      row.querySelector('.pf.sun').style.display = row.querySelector('.sun').checked ? 'inline' : 'none'; }
+  row.querySelectorAll('[data-condition]').forEach(p => { p.hidden = p.dataset.condition !== t; });
+  row.querySelectorAll('[data-extra]').forEach(p => { p.hidden = t !== 'conv' || !row.querySelector('.' + p.dataset.extra).checked; });
+  updateFaceSummary(row);
 }
-document.querySelectorAll('#faces tr').forEach(row => {
+document.querySelectorAll('#faces [data-face]').forEach(row => {
   row.querySelector('.bc').value = DEFAULT_BC[row.dataset.face];
-  row.querySelector('.bc').addEventListener('change', () => { showParams(row); sketch(); });
-  row.querySelector('.rad').addEventListener('change', () => showParams(row));
-  row.querySelector('.sun').addEventListener('change', () => showParams(row));
+  row.addEventListener('change', e => { showParams(row); if (e.target.matches('.bc')) sketch(); });
+  row.addEventListener('input', () => updateFaceSummary(row));
   showParams(row);
 });
 
@@ -196,7 +306,7 @@ function sketch() {
   let clamped = false;
   const r = [Lx, Ly, Lz].map(v => { const q = v / Lmax; if (q < 0.1) { clamped = true; return 0.1; } return q; });
   const S = 200, ax = S * r[0], ay = S * r[1], az = S * r[2];
-  const bc = f => document.querySelector(`#faces tr[data-face="${f}"] .bc`).value;
+  const bc = f => document.querySelector(`#faces [data-face="${f}"] .bc`).value;
   // orthographic camera. Rotate the block about z by AZ, then look at it from the front (-Y) and above (+Z, tilt EL).
   // screen right = X, screen up = Y*sin(EL) + Z*cos(EL); depth toward the viewer = -Y*cos(EL) + Z*sin(EL)
   const ca = Math.cos(AZ), sa = Math.sin(AZ), ce = Math.cos(EL), se = Math.sin(EL);
@@ -249,7 +359,7 @@ sketch();
 function readBCs() {
   const out = {};
   const [Lx, Ly, Lz] = dims(), areas = {'-x': Ly * Lz, '+x': Ly * Lz, '-y': Lx * Lz, '+y': Lx * Lz, '-z': Lx * Ly, '+z': Lx * Ly};
-  document.querySelectorAll('#faces tr').forEach(row => {
+  document.querySelectorAll('#faces [data-face]').forEach(row => {
     const f = row.dataset.face, t = row.querySelector('.bc').value, g = c => +row.querySelector(c).value, gu = c => row.querySelector(c).value;
     if (t === 'fixed') out[f] = {type: t, T: toC(g('.Tfix'), gu('.TfixU'))};
     else if (t === 'flux') { const u = row.querySelector('.qU').value; out[f] = {type: t, q: u === 'W' ? g('.q') / areas[f] : u === 'btu' ? g('.q') * 3.154591 : g('.q')}; }

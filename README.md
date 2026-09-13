@@ -1,11 +1,11 @@
-# 3D Conduction Calculator
+# 3D Steady-State Heat Transfer Calculator
 
-**[Open the calculator in your browser →](https://aiden-azarnoush.github.io/3d-conduction-calculator/)**
+**[Open the calculator in your browser →](https://aiden-azarnoush.github.io/3d-steady-state-heat-transfer-calculator/)**
 
 Steady heat conduction in a rectangular block, solved by the finite-volume
 method in your browser. Set the block size and material, tell it what
 happens on each of the six faces — a fixed temperature, a heat source, an
-insulated surface, or convection to a fluid (with radiation if you like) —
+insulated surface, or convection to a fluid (with optional radiation and solar heating) —
 add internal heat generation if there is any, and press Solve. You get
 the block with its surface temperature painted on, a slice viewer to look
 inside, the minimum / maximum / average temperature, the heat flow through
@@ -21,22 +21,28 @@ every face, and a check that heat in equals heat out.
 
 ## Using it
 
-1. **The block.** Length, width, and height with sliders and boxes, in mm,
+1. **Dimensions.** Length, width, and height with sliders and boxes, in mm,
    cm, m, in, or ft. The sketch stays proportional (clamped at 10:1 so a
    thin plate still draws as a plate) and colors each visible face by its
    boundary condition.
-2. **Material.** Eleven common metals, plastics, and glass, or type your own
-   conductivity (W/m·K or BTU/hr·ft·°F).
+2. **Material Properties.** Eleven common metals, plastics, and glass, or
+   type your own conductivity (W/m·K or BTU/hr·ft·°F).
 3. **Grid.** Coarse, medium, or fine. The tool sizes the grid from the block
    proportions (the longest side gets 16, 28, or 40 cells; never fewer than
    4; at most about 70,000 cells) so the page stays responsive.
-4. **Faces.** For each of the six faces choose fixed temperature, heat flux
+4. **Boundary Conditions.** Open a face panel to choose fixed temperature, heat flux
    in (W/m², total watts, or BTU/hr·ft²), insulated, or convection with an
    h and a fluid temperature, plus optional radiation (emissivity and
-   surroundings temperature). Temperatures in °C, °F, or K. Internal heat
-   generation in watts or W/m³.
+   surroundings temperature) and solar heating (irradiance and absorptivity). Each
+   collapsed panel summarizes the condition and active options. Temperatures
+   in °C, °F, or K. Internal heat generation in watts or W/m³.
 5. **Results.** Rotate the 3D block, slide a plane through it along x, y,
-   or z, and read the numbers.
+   or z, and read the numbers. The position slider moves the selected plane
+   through the block.
+
+Dimensions, Material Properties, and Grid are stacked in the left column,
+with Boundary Conditions on the right. On smaller screens, sections follow
+their numbered order in a single column.
 
 > [!TIP]
 > Start with the default: an aluminum bar heated from below and cooled by
