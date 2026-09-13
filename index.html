@@ -29,7 +29,7 @@
   button { font-size:.95rem; padding:9px 14px; border-radius:8px; border:1px solid #c9d4e0; background:#e9eef5; color:var(--ink); cursor:pointer; }
   button.primary { background:var(--blue); color:#fff; border-color:var(--blue); font-weight:600; }
   .opt { display:inline-block; margin-right:14px; font-size:.93rem; }
-  svg.sketch { width:100%; max-width:360px; height:auto; display:block; margin:6px auto 0; }
+  svg.sketch { width:100%; height:auto; display:block; margin:6px auto 0; user-select:none; }
   #view3d { width:100%; height:460px; } #slice { width:100%; height:420px; }
   .stats { font-size:.93rem; line-height:1.7; }
   .stats b { font-variant-numeric:tabular-nums; }
@@ -54,20 +54,8 @@
       <tr><td>Width W (y)</td><td><input type="range" id="Wr" value="0.05"></td><td><input type="number" id="W" step="any" value="0.05"></td><td><select id="WU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
       <tr><td>Height H (z)</td><td><input type="range" id="Hr" value="0.02"></td><td><input type="number" id="H" step="any" value="0.02"></td><td><select id="HU" class="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1" selected>m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
     </table>
-    <svg id="sketch" class="sketch" viewBox="0 0 720 240" style="max-width:700px"></svg>
+    <svg id="sketch" class="sketch" viewBox="0 0 480 360" style="max-width:520px;cursor:grab"></svg>
     <div class="note" id="sketchNote"></div>
-
-    <h2 style="margin-top:14px">2. Material</h2>
-    <table class="in">
-      <tr><td style="width:40%">Material</td><td colspan="2"><select id="mat"></select></td></tr>
-      <tr><td>Thermal conductivity k</td><td><input id="k" type="number" step="any"></td><td style="width:150px"><select id="kU"><option value="1">W/m·K</option><option value="1.730735">BTU/hr·ft·°F</option></select></td></tr>
-    </table>
-
-    <h2 style="margin-top:14px">3. Grid</h2>
-    <label class="opt"><input type="radio" name="grid" value="16"> coarse</label>
-    <label class="opt"><input type="radio" name="grid" value="28" checked> medium</label>
-    <label class="opt"><input type="radio" name="grid" value="40"> fine</label>
-    <div class="note" id="gridNote"></div>
   </div>
 
   <!-- ------------------------------------------------------------ 4 boundary conditions -->
@@ -82,6 +70,22 @@
     <div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button id="solve" class="primary">Solve steady state</button>
       <span class="note" style="margin:0">show results in</span> <select id="tU" style="width:auto"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select>
       <span id="status" class="note" style="margin:0"></span></div>
+  </div>
+
+  <div class="card">
+    <h2>2. Material</h2>
+    <table class="in">
+      <tr><td style="width:40%">Material</td><td colspan="2"><select id="mat"></select></td></tr>
+      <tr><td>Thermal conductivity k</td><td><input id="k" type="number" step="any"></td><td style="width:150px"><select id="kU"><option value="1">W/m·K</option><option value="1.730735">BTU/hr·ft·°F</option></select></td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>3. Grid</h2>
+    <label class="opt"><input type="radio" name="grid" value="16"> coarse</label>
+    <label class="opt"><input type="radio" name="grid" value="28" checked> medium</label>
+    <label class="opt"><input type="radio" name="grid" value="40"> fine</label>
+    <div class="note" id="gridNote"></div>
   </div>
 
   <!-- ------------------------------------------------------------ results -->
@@ -184,47 +188,61 @@ function gridSize() {
   if (tot > 70000) { const f = Math.cbrt(70000 / tot); n = n.map(v => Math.max(4, Math.floor(v * f))); }
   return n;
 }
+let AZ = 35 * Math.PI / 180, EL = 28 * Math.PI / 180;       // view angles, changed by dragging
 function sketch() {
   const [Lx, Ly, Lz] = dims();
   if (!(Lx > 0 && Ly > 0 && Lz > 0)) { $('sketchNote').innerHTML = '<span class="err">dimensions must be positive</span>'; return; }
   const Lmax = Math.max(Lx, Ly, Lz);
   let clamped = false;
   const r = [Lx, Ly, Lz].map(v => { const q = v / Lmax; if (q < 0.1) { clamped = true; return 0.1; } return q; });
-  const S = 130, ax = S * r[0], ay = S * r[1], az = S * r[2];
+  const S = 200, ax = S * r[0], ay = S * r[1], az = S * r[2];
   const bc = f => document.querySelector(`#faces tr[data-face="${f}"] .bc`).value;
-  // one isometric view: P projects (x,y,z); faces given as [name, label, points]
-  const view = (ox, P, facesToDraw, title) => {
-    let out = '';
-    for (const [f, label, pts] of facesToDraw) {
-      const sp = pts.map(p => P(...p));
-      const cx = sp.reduce((a, p) => a + p[0], 0) / 4, cy = sp.reduce((a, p) => a + p[1], 0) / 4;
-      out += `<polygon points="${sp.map(p => p.join(',')).join(' ')}" fill="${FACE_COLOR[bc(f)]}" fill-opacity=".6" stroke="#1c2733" stroke-width="1.2"/>
-              <text x="${cx}" y="${cy + 4}" font-size="11" font-weight="600" text-anchor="middle" fill="#1c2733">${label}</text>`;
-    }
-    return out + `<text x="${ox}" y="18" font-size="11" text-anchor="middle" fill="#66768a">${title}</text>`;
-  };
-  // view A: from front-top-left  -> shows top (+z), front (-y), left (-x)
-  const PA = (x, y, z) => [180 + (x - y) * 0.866, 160 - (x + y) * 0.5 - z];
-  const A = view(180, PA, [
-    ['-x', 'left',  [[0, 0, 0], [0, ay, 0], [0, ay, az], [0, 0, az]]],
-    ['-y', 'front', [[0, 0, 0], [ax, 0, 0], [ax, 0, az], [0, 0, az]]],
-    ['+z', 'top',   [[0, 0, az], [ax, 0, az], [ax, ay, az], [0, ay, az]]],
-  ], 'seen from the front, above');
-  // view B: from back-bottom-right -> shows bottom (-z), back (+y), right (+x); drawn by mirroring the block
-  const PB = (x, y, z) => [540 + ((ax - x) - (ay - y)) * 0.866, 80 + ((ax - x) + (ay - y)) * 0.5 + (az - z)];
-  const B = view(540, PB, [
-    ['+x', 'right',  [[ax, 0, 0], [ax, ay, 0], [ax, ay, az], [ax, 0, az]]],
-    ['+y', 'back',   [[0, ay, 0], [ax, ay, 0], [ax, ay, az], [0, ay, az]]],
-    ['-z', 'bottom', [[0, 0, 0], [ax, 0, 0], [ax, ay, 0], [0, ay, 0]]],
-  ], 'seen from the back, below');
+  // orthographic camera. Rotate the block about z by AZ, then look at it from the front (-Y) and above (+Z, tilt EL).
+  // screen right = X, screen up = Y*sin(EL) + Z*cos(EL); depth toward the viewer = -Y*cos(EL) + Z*sin(EL)
+  const ca = Math.cos(AZ), sa = Math.sin(AZ), ce = Math.cos(EL), se = Math.sin(EL);
+  const cx0 = ax / 2, cy0 = ay / 2, cz0 = az / 2;
+  const P = (x, y, z) => { const X = (x - cx0) * ca - (y - cy0) * sa, Y = (x - cx0) * sa + (y - cy0) * ca, Z = z - cz0;
+    return [240 + X, 200 - (Y * se + Z * ce), -Y * ce + Z * se]; };
+  const faces = [
+    ['-x', 'left',   [[0, 0, 0], [0, ay, 0], [0, ay, az], [0, 0, az]],   [-1, 0, 0]],
+    ['+x', 'right',  [[ax, 0, 0], [ax, ay, 0], [ax, ay, az], [ax, 0, az]], [1, 0, 0]],
+    ['-y', 'front',  [[0, 0, 0], [ax, 0, 0], [ax, 0, az], [0, 0, az]],   [0, -1, 0]],
+    ['+y', 'back',   [[0, ay, 0], [ax, ay, 0], [ax, ay, az], [0, ay, az]], [0, 1, 0]],
+    ['-z', 'bottom', [[0, 0, 0], [ax, 0, 0], [ax, ay, 0], [0, ay, 0]],   [0, 0, -1]],
+    ['+z', 'top',    [[0, 0, az], [ax, 0, az], [ax, ay, az], [0, ay, az]], [0, 0, 1]],
+  ];
+  // visibility: a face is visible when its outward normal points toward the viewer (positive depth component)
+  const nDepth = ([nx, ny, nz]) => -(nx * sa + ny * ca) * ce + nz * se;
+  const visible = faces.filter(f => nDepth(f[3]) > 0)
+    .map(f => ({f, sp: f[2].map(p => P(...p))}))
+    .sort((a, b) => Math.min(...a.sp.map(p => p[2])) - Math.min(...b.sp.map(p => p[2])));   // farthest (smallest depth) first
+  let out = '';
+  for (const {f, sp} of visible) {
+    const cx = sp.reduce((a, p) => a + p[0], 0) / 4, cy = sp.reduce((a, p) => a + p[1], 0) / 4;
+    out += `<polygon points="${sp.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" fill="${FACE_COLOR[bc(f[0])]}" fill-opacity=".75" stroke="#1c2733" stroke-width="1.3"/>
+            <text x="${cx}" y="${cy + 4}" font-size="12" font-weight="600" text-anchor="middle" fill="#1c2733">${f[1]}</text>`;
+  }
+  // axis hints at the corner nearest the viewer
+  const ax0 = P(0, 0, 0), axX = P(ax * 1.15, 0, 0), axY = P(0, ay * 1.15, 0), axZ = P(0, 0, az * 1.3);
+  const arrow = (a, b, t) => `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#66768a" stroke-width="1" stroke-dasharray="3 2"/><text x="${b[0]}" y="${b[1]}" font-size="11" fill="#66768a">${t}</text>`;
   const legend = Object.entries({fixed: 'fixed T', flux: 'heat in', insulated: 'insulated', conv: 'convection'}).map(([k, t], i) =>
-    `<rect x="${200 + i * 88}" y="226" width="10" height="10" fill="${FACE_COLOR[k]}" fill-opacity=".7"/><text x="${214 + i * 88}" y="235" font-size="10" fill="#66768a">${t}</text>`).join('');
-  $('sketch').innerHTML = A + B + legend;
+    `<rect x="${60 + i * 100}" y="343" width="10" height="10" fill="${FACE_COLOR[k]}" fill-opacity=".8"/><text x="${74 + i * 100}" y="352" font-size="10" fill="#66768a">${t}</text>`).join('');
+  $('sketch').innerHTML = out + arrow(ax0, axX, 'x (L)') + arrow(ax0, axY, 'y (W)') + arrow(ax0, axZ, 'z (H)') + legend +
+    `<text x="240" y="16" font-size="11" text-anchor="middle" fill="#66768a">drag to rotate</text>`;
   const n = gridSize();
   $('gridNote').textContent = `${n[0]} × ${n[1]} × ${n[2]} cells = ${(n[0] * n[1] * n[2]).toLocaleString()} (sized from the block proportions; the longest side gets the most cells)`;
   $('sketchNote').innerHTML = (clamped ? '<span class="warn">Sketch not to scale (very thin block); the calculation uses the true dimensions.</span> ' : '') +
-    'All six faces, colored by their boundary condition: left view shows top, front, and left; right view shows bottom, back, and right.';
+    'Faces are colored by their boundary condition; drag the block to see the other sides.';
 }
+{ let dragging = false, lx = 0, ly = 0;
+  const sv = $('sketch');
+  const down = e => { dragging = true; lx = e.clientX; ly = e.clientY; sv.style.cursor = 'grabbing'; };
+  const move = e => { if (!dragging) return; AZ += (e.clientX - lx) * 0.01; EL = Math.max(-1.5, Math.min(1.5, EL + (e.clientY - ly) * 0.01)); lx = e.clientX; ly = e.clientY; sketch(); };
+  const up = () => { dragging = false; sv.style.cursor = 'grab'; };
+  sv.addEventListener('mousedown', down); window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+  sv.addEventListener('touchstart', e => { down(e.touches[0]); e.preventDefault(); }, {passive: false});
+  sv.addEventListener('touchmove', e => { move(e.touches[0]); e.preventDefault(); }, {passive: false});
+  sv.addEventListener('touchend', up); }
 sketch();
 
 // ------------------------------------------------------------------ solver (finite volume, steady, CG)
