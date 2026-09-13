@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Conduction Calculator</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  :root { --ink:#1c2733; --muted:#66768a; --blue:#1f5fbf; --orange:#d3541f; --green:#2a9d5c; --red:#b00020; --bg:#f6f8fb; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:22px 14px; font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  h1 { text-align:center; font-size:1.5rem; margin:0 0 4px; }
+  h2 { font-size:1.02rem; margin:0 0 10px; }
+  .sub { text-align:center; color:var(--muted); font-size:.92rem; margin-bottom:18px; }
+  .wrap { max-width:1240px; margin:0 auto; display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .card { background:#fff; border-radius:12px; padding:16px 18px; box-shadow:0 2px 12px rgba(0,0,0,.07); }
+  .full { grid-column:1 / -1; }
+  table.in { width:100%; border-collapse:collapse; }
+  table.in td { padding:6px 6px; border-bottom:1px solid #e6ebf2; font-size:.93rem; vertical-align:middle; }
+  input[type=number], select { padding:6px 8px; font-size:.95rem; border:1px solid #c9d4e0; border-radius:6px; width:100%; }
+  input[type=range] { width:100%; }
+  .dim td:nth-child(1) { width:26%; } .dim td:nth-child(2) { width:34%; } .dim td:nth-child(3) { width:22%; } .dim td:nth-child(4) { width:18%; }
+  .faces td.p { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .faces td.p > * { width:auto; min-width:70px; }
+  .faces .lab { font-size:.8rem; color:var(--muted); }
+  .note { color:var(--muted); font-size:.82rem; line-height:1.45; margin-top:8px; }
+  .warn { color:var(--orange); font-weight:600; }
+  .err { color:var(--red); font-weight:600; }
+  button { font-size:.95rem; padding:9px 14px; border-radius:8px; border:1px solid #c9d4e0; background:#e9eef5; color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--blue); color:#fff; border-color:var(--blue); font-weight:600; }
+  .opt { display:inline-block; margin-right:14px; font-size:.93rem; }
+  svg.sketch { width:100%; max-width:360px; height:auto; display:block; margin:6px auto 0; }
+  #view3d { width:100%; height:460px; } #slice { width:100%; height:420px; }
+  .stats { font-size:.93rem; line-height:1.7; }
+  .stats b { font-variant-numeric:tabular-nums; }
+  .sw { display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:-1px; margin-right:4px; }
+  footer { max-width:1240px; margin:22px auto 0; text-align:center; color:#66768a; font-size:.85rem; line-height:1.9; }
+  footer a { color:#1f5fbf; text-decoration:none; margin:0 8px; white-space:nowrap; }
+  footer a:hover { text-decoration:underline; }
+  footer svg { width:16px; height:16px; vertical-align:-3px; margin-right:4px; }
+  @media (max-width:900px) { .wrap { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<h1>3D Conduction Calculator</h1>
+<div class="sub">Steady heat conduction in a rectangular block with heat sources, insulation, convection, and radiation on any face, solved by the finite-volume method in your browser.</div>
+
+<div class="wrap">
+  <!-- ------------------------------------------------------------ 1 geometry -->
+  <div class="card">
+    <h2>1. The block</h2>
+    <table class="in dim">
+      <tr><td>Length L (x)</td><td><input type="range" id="Lr" min="1" max="500" step="1" value="100"></td><td><input type="number" id="L" step="any" value="100"></td><td rowspan="3"><select id="lenU"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1">m</option><option value="0.0254">in</option><option value="0.3048">ft</option></select></td></tr>
+      <tr><td>Width W (y)</td><td><input type="range" id="Wr" min="1" max="500" step="1" value="60"></td><td><input type="number" id="W" step="any" value="60"></td></tr>
+      <tr><td>Height H (z)</td><td><input type="range" id="Hr" min="1" max="500" step="1" value="20"></td><td><input type="number" id="H" step="any" value="20"></td></tr>
+    </table>
+    <svg id="sketch" class="sketch" viewBox="0 0 360 230"></svg>
+    <div class="note" id="sketchNote"></div>
+
+    <h2 style="margin-top:14px">2. Material</h2>
+    <table class="in">
+      <tr><td style="width:40%">Material</td><td colspan="2"><select id="mat"></select></td></tr>
+      <tr><td>Thermal conductivity k</td><td><input id="k" type="number" step="any"></td><td style="width:150px"><select id="kU"><option value="1">W/m·K</option><option value="1.730735">BTU/hr·ft·°F</option></select></td></tr>
+    </table>
+
+    <h2 style="margin-top:14px">3. Grid</h2>
+    <label class="opt"><input type="radio" name="grid" value="16"> coarse</label>
+    <label class="opt"><input type="radio" name="grid" value="28" checked> medium</label>
+    <label class="opt"><input type="radio" name="grid" value="40"> fine</label>
+    <div class="note" id="gridNote"></div>
+  </div>
+
+  <!-- ------------------------------------------------------------ 4 boundary conditions -->
+  <div class="card">
+    <h2>4. What happens on each face</h2>
+    <table class="in">
+      <tr><td style="width:40%">Temperature unit for everything below</td><td><select id="tU"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select></td></tr>
+    </table>
+    <table class="in faces" id="faces"></table>
+    <table class="in" style="margin-top:6px">
+      <tr><td style="width:40%">Heat generated inside the block</td><td><input id="qgen" type="number" step="any" value="0"></td><td style="width:110px"><select id="qgenU"><option value="W">W total</option><option value="Wm3">W/m³</option></select></td></tr>
+    </table>
+    <div class="note">Fixed temperature: the face is held at that value. Heat flux: heat pushed into the face (a heater, a chip). Insulated: nothing crosses.
+      Convection: the face exchanges heat with a fluid at T<sub>∞</sub> through the coefficient h; tick radiation to add ε σ (T⁴ − T<sub>sur</sub>⁴).</div>
+    <div style="margin-top:12px"><button id="solve" class="primary">Solve steady state</button> <span id="status" class="note" style="display:inline;margin-left:10px"></span></div>
+  </div>
+
+  <!-- ------------------------------------------------------------ results -->
+  <div class="card full" id="results" style="display:none">
+    <h2>5. Results</h2>
+    <div class="wrap" style="grid-template-columns:1fr 1fr; gap:14px">
+      <div><div id="view3d"></div><div class="note">Surface temperature. Drag to rotate, scroll to zoom.</div></div>
+      <div>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
+          <span style="font-size:.9rem">Slice through the block:</span>
+          <select id="sliceAxis" style="width:auto"><option value="x">plane x = const</option><option value="y">plane y = const</option><option value="z" selected>plane z = const</option></select>
+          <input id="slicePos" type="range" min="0" max="1" step="0.01" value="0.5" style="flex:1">
+          <span id="sliceLab" style="font-size:.9rem;white-space:nowrap"></span>
+        </div>
+        <div id="slice"></div>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+
+<footer>
+  Written by <b>Aiden Azarnoush</b><br>
+  <a href="https://github.com/aiden-azarnoush/3d-conduction-calculator"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3 1 8l4.5 5 1-1L2.9 8l3.6-4zM10.5 3l-1 1L13.1 8l-3.6 4 1 1L15 8z"/></svg>source on GitHub</a>
+  <a href="https://github.com/aiden-azarnoush"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM8 4a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zm0 6c-2 0-3.5 1-3.5 2v.3A5.5 5.5 0 0 0 8 13.5a5.5 5.5 0 0 0 3.5-1.2V12c0-1-1.5-2-3.5-2z"/></svg>all my repositories</a>
+  <a href="https://aiden-azarnoush.github.io"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm4.9 6h-2.1a11 11 0 0 0-.9-3.6A5.5 5.5 0 0 1 12.9 7zM8 2.5c.7.8 1.4 2.3 1.6 4.5H6.4c.2-2.2.9-3.7 1.6-4.5zM3.1 7a5.5 5.5 0 0 1 3-3.6c-.4 1-.7 2.3-.9 3.6H3.1zm0 2h2.1c.2 1.3.5 2.6.9 3.6A5.5 5.5 0 0 1 3.1 9zM8 13.5c-.7-.8-1.4-2.3-1.6-4.5h3.2c-.2 2.2-.9 3.7-1.6 4.5zm1.9-.9c.4-1 .7-2.3.9-3.6h2.1a5.5 5.5 0 0 1-3 3.6z"/></svg>aiden-azarnoush.github.io</a>
+  <div style="margin-top:6px">Found this useful? <a href="https://paypal.me/azarnoush">☕ Buy me a coffee</a> &nbsp;
+    <a href="https://paypal.me/azarnoush/3">$3</a> · <a href="https://paypal.me/azarnoush/5">$5</a> · <a href="https://paypal.me/azarnoush">other</a></div>
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const SIG = 5.670e-8;
+// ------------------------------------------------------------------ materials [k W/mK, rho, cp]
+const MATERIALS = {
+  'Aluminum 6061': [167, 2700, 896], 'Aluminum 1050 (pure)': [229, 2705, 900], 'Copper': [401, 8960, 385],
+  'Brass': [109, 8500, 380], 'Carbon steel': [45, 7850, 490], 'Stainless steel 304': [16, 8000, 500],
+  'Titanium Ti-6Al-4V': [6.7, 4430, 526], 'Silicon': [148, 2330, 712], 'FR-4 (circuit board)': [0.3, 1850, 1100],
+  'ABS plastic': [0.2, 1040, 1400], 'Glass': [1.0, 2500, 840], 'Custom': null,
+};
+for (const m in MATERIALS) { const o = document.createElement('option'); o.textContent = m; $('mat').appendChild(o); }
+$('mat').addEventListener('change', () => { const p = MATERIALS[$('mat').value]; if (p) { $('k').value = p[0]; $('kU').value = '1'; } });
+$('k').addEventListener('input', () => { $('mat').value = 'Custom'; });
+$('mat').value = 'Aluminum 6061'; $('k').value = 167;
+
+// ------------------------------------------------------------------ faces
+const FACES = [['-x', 'Left face (x = 0)'], ['+x', 'Right face (x = L)'], ['-y', 'Front face (y = 0)'], ['+y', 'Back face (y = W)'], ['-z', 'Bottom face (z = 0)'], ['+z', 'Top face (z = H)']];
+const FACE_COLOR = {fixed: '#8e6bbf', flux: '#d3541f', insulated: '#9aa7b5', conv: '#1f5fbf'};
+const DEFAULT_BC = {'-x': 'conv', '+x': 'conv', '-y': 'conv', '+y': 'conv', '-z': 'flux', '+z': 'conv'};
+function faceRow(key, label) {
+  return `<tr data-face="${key}"><td style="width:26%">${label}</td>
+    <td style="width:22%"><select class="bc"><option value="fixed">fixed temperature</option><option value="flux">heat flux in</option><option value="insulated">insulated</option><option value="conv">convection</option></select></td>
+    <td class="p">
+      <span class="pf fixed"><span class="lab">T =</span> <input class="Tfix" type="number" step="any" value="100"></span>
+      <span class="pf flux"><span class="lab">q =</span> <input class="q" type="number" step="any" value="5000"> <select class="qU"><option value="Wm2">W/m²</option><option value="W">W total</option><option value="btu">BTU/hr·ft²</option></select></span>
+      <span class="pf conv"><span class="lab">h =</span> <input class="h" type="number" step="any" value="15"> <select class="hU"><option value="1">W/m²K</option><option value="5.678263">BTU/hr·ft²·°F</option></select>
+        <span class="lab">T∞ =</span> <input class="Tinf" type="number" step="any" value="25">
+        <label class="lab"><input type="checkbox" class="rad"> radiation</label> <span class="pf rad"><span class="lab">ε =</span> <input class="eps" type="number" step="any" min="0" max="1" value="0.9"> <span class="lab">T<sub>sur</sub> =</span> <input class="Tsur" type="number" step="any" value="25"></span></span>
+    </td></tr>`;
+}
+$('faces').innerHTML = FACES.map(([k, l]) => faceRow(k, l)).join('');
+function showParams(row) {
+  const t = row.querySelector('.bc').value;
+  row.querySelectorAll('.pf').forEach(p => p.style.display = 'none');
+  row.querySelector('.pf.' + t).style.display = 'inline';
+  if (t === 'conv') row.querySelector('.pf.rad').style.display = row.querySelector('.rad').checked ? 'inline' : 'none';
+}
+document.querySelectorAll('#faces tr').forEach(row => {
+  row.querySelector('.bc').value = DEFAULT_BC[row.dataset.face];
+  row.querySelector('.bc').addEventListener('change', () => { showParams(row); sketch(); });
+  row.querySelector('.rad').addEventListener('change', () => showParams(row));
+  showParams(row);
+});
+
+// ------------------------------------------------------------------ units
+const toC = (v, u) => u === 'F' ? (v - 32) / 1.8 : u === 'K' ? v - 273.15 : v;
+const fromC = (c, u) => u === 'F' ? c * 1.8 + 32 : u === 'K' ? c + 273.15 : c;
+const tSym = () => ({C: '°C', F: '°F', K: 'K'})[$('tU').value];
+const dims = () => { const s = +$('lenU').value; return [+$('L').value * s, +$('W').value * s, +$('H').value * s]; };
+
+// sliders <-> boxes, per unit ranges
+const RANGES = {'0.001': [1, 500], '0.01': [0.5, 100], '1': [0.01, 5], '0.0254': [0.1, 60], '0.3048': [0.05, 10]};
+function setRanges() { const [lo, hi] = RANGES[$('lenU').value]; for (const d of ['L', 'W', 'H']) { const r = $(d + 'r'); r.min = lo; r.max = hi; r.step = (hi - lo) / 500; } }
+for (const d of ['L', 'W', 'H']) {
+  $(d + 'r').addEventListener('input', () => { $(d).value = (+$(d + 'r').value).toPrecision(4).replace(/\.?0+$/, ''); sketch(); });
+  $(d).addEventListener('input', () => { $(d + 'r').value = +$(d).value; sketch(); });
+}
+$('lenU').addEventListener('change', () => { setRanges(); for (const d of ['L', 'W', 'H']) $(d + 'r').value = +$(d).value; sketch(); });
+document.querySelectorAll('input[name=grid]').forEach(r => r.addEventListener('change', sketch));
+setRanges();
+
+// ------------------------------------------------------------------ sketch (isometric, proportional with a 10:1 clamp)
+function gridSize() {
+  const [Lx, Ly, Lz] = dims(), nLong = +document.querySelector('input[name=grid]:checked').value, Lmax = Math.max(Lx, Ly, Lz);
+  let n = [Lx, Ly, Lz].map(v => Math.max(4, Math.round(nLong * v / Lmax)));
+  let tot = n[0] * n[1] * n[2];
+  if (tot > 70000) { const f = Math.cbrt(70000 / tot); n = n.map(v => Math.max(4, Math.floor(v * f))); }
+  return n;
+}
+function sketch() {
+  const [Lx, Ly, Lz] = dims();
+  if (!(Lx > 0 && Ly > 0 && Lz > 0)) { $('sketchNote').innerHTML = '<span class="err">dimensions must be positive</span>'; return; }
+  const Lmax = Math.max(Lx, Ly, Lz);
+  let clamped = false;
+  const r = [Lx, Ly, Lz].map(v => { const q = v / Lmax; if (q < 0.1) { clamped = true; return 0.1; } return q; });
+  const S = 150, ax = S * r[0], ay = S * r[1], az = S * r[2];
+  // isometric: x to the right-down, y to the right-up, z up
+  const P = (x, y, z) => [180 + (x - y) * 0.866, 150 - (x + y) * 0.5 - z];
+  const bc = f => document.querySelector(`#faces tr[data-face="${f}"] .bc`).value;
+  const poly = (pts, f) => `<polygon points="${pts.map(p => P(...p).join(',')).join(' ')}" fill="${FACE_COLOR[bc(f)]}" fill-opacity=".55" stroke="#1c2733" stroke-width="1.2"/>`;
+  const top = poly([[0, 0, az], [ax, 0, az], [ax, ay, az], [0, ay, az]], '+z');
+  const front = poly([[0, 0, 0], [ax, 0, 0], [ax, 0, az], [0, 0, az]], '-y');
+  const right = poly([[ax, 0, 0], [ax, ay, 0], [ax, ay, az], [ax, 0, az]], '+x');
+  const lab = (p, t) => `<text x="${P(...p)[0]}" y="${P(...p)[1]}" font-size="11" text-anchor="middle" fill="#1c2733">${t}</text>`;
+  const legend = Object.entries({fixed: 'fixed T', flux: 'heat in', insulated: 'insulated', conv: 'convection'}).map(([k, t], i) =>
+    `<rect x="${8 + i * 88}" y="212" width="10" height="10" fill="${FACE_COLOR[k]}" fill-opacity=".7"/><text x="${22 + i * 88}" y="221" font-size="10" fill="#66768a">${t}</text>`).join('');
+  $('sketch').innerHTML = front + right + top + lab([ax / 2, -14, -6], 'L') + lab([ax + 14, ay / 2, -6], 'W') + lab([-12, -8, az / 2], 'H') + legend;
+  const n = gridSize();
+  $('gridNote').textContent = `${n[0]} × ${n[1]} × ${n[2]} cells = ${(n[0] * n[1] * n[2]).toLocaleString()} (sized from the block proportions; the longest side gets the most cells)`;
+  $('sketchNote').innerHTML = (clamped ? '<span class="warn">Sketch not to scale (very thin block); the calculation uses the true dimensions.</span> ' : '') +
+    'Visible: top, front, and right faces, colored by their boundary condition.';
+}
+sketch();
+
+// ------------------------------------------------------------------ solver (finite volume, steady, CG)
+function readBCs() {
+  const tu = $('tU').value, out = {};
+  const [Lx, Ly, Lz] = dims(), areas = {'-x': Ly * Lz, '+x': Ly * Lz, '-y': Lx * Lz, '+y': Lx * Lz, '-z': Lx * Ly, '+z': Lx * Ly};
+  document.querySelectorAll('#faces tr').forEach(row => {
+    const f = row.dataset.face, t = row.querySelector('.bc').value, g = c => +row.querySelector(c).value;
+    if (t === 'fixed') out[f] = {type: t, T: toC(g('.Tfix'), tu)};
+    else if (t === 'flux') { const u = row.querySelector('.qU').value; out[f] = {type: t, q: u === 'W' ? g('.q') / areas[f] : u === 'btu' ? g('.q') * 3.154591 : g('.q')}; }
+    else if (t === 'insulated') out[f] = {type: t};
+    else out[f] = {type: t, h: g('.h') * +row.querySelector('.hU').value, Tinf: toC(g('.Tinf'), tu),
+                   eps: row.querySelector('.rad').checked ? g('.eps') : 0, Tsur: toC(g('.Tsur'), tu)};
+  });
+  return out;
+}
+
+function assemble(n, d, k, faces, qgen, T) {
+  const [nx, ny, nz] = n, [dx, dy, dz] = d, N = nx * ny * nz;
+  const diag = new Float64Array(N), rhs = new Float64Array(N).fill(qgen * dx * dy * dz);
+  const Gx = k * dy * dz / dx, Gy = k * dx * dz / dy, Gz = k * dx * dy / dz;
+  const A = {'-x': dy * dz, '+x': dy * dz, '-y': dx * dz, '+y': dx * dz, '-z': dx * dy, '+z': dx * dy};
+  const half = {'-x': dx / 2, '+x': dx / 2, '-y': dy / 2, '+y': dy / 2, '-z': dz / 2, '+z': dz / 2};
+  const Gface = {};                                     // per face: effective conductance and reference T (for heat-flow reports)
+  for (let l = 0; l < nz; l++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const a = (l * ny + j) * nx + i;
+    diag[a] += (i > 0 ? Gx : 0) + (i < nx - 1 ? Gx : 0) + (j > 0 ? Gy : 0) + (j < ny - 1 ? Gy : 0) + (l > 0 ? Gz : 0) + (l < nz - 1 ? Gz : 0);
+    const onFace = [['-x', i === 0], ['+x', i === nx - 1], ['-y', j === 0], ['+y', j === ny - 1], ['-z', l === 0], ['+z', l === nz - 1]];
+    for (const [f, on] of onFace) {
+      if (!on) continue;
+      const bc = faces[f], Gh = k * A[f] / half[f];
+      if (bc.type === 'fixed') { diag[a] += Gh; rhs[a] += Gh * bc.T; }
+      else if (bc.type === 'flux') { rhs[a] += bc.q * A[f]; }
+      else if (bc.type === 'conv') {
+        let h = bc.h;
+        if (bc.eps > 0) { const Tk = T[a] + 273.15, Ts = bc.Tsur + 273.15; h += bc.eps * SIG * (Tk + Ts) * (Tk * Tk + Ts * Ts); }
+        const G = h > 0 ? 1 / (1 / (h * A[f]) + 1 / Gh) : 0;
+        diag[a] += G; rhs[a] += G * bc.Tinf;
+      }
+    }
+  }
+  const matvec = (x, y) => {
+    for (let l = 0; l < nz; l++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const a = (l * ny + j) * nx + i; let s = diag[a] * x[a];
+      if (i > 0) s -= Gx * x[a - 1]; if (i < nx - 1) s -= Gx * x[a + 1];
+      if (j > 0) s -= Gy * x[a - nx]; if (j < ny - 1) s -= Gy * x[a + nx];
+      if (l > 0) s -= Gz * x[a - nx * ny]; if (l < nz - 1) s -= Gz * x[a + nx * ny];
+      y[a] = s;
+    }
+  };
+  return {diag, rhs, matvec, Gx, Gy, Gz, A, half};
+}
+
+function cg(sys, x0, tol = 1e-9, maxit = 5000) {
+  const N = x0.length, x = Float64Array.from(x0), r = new Float64Array(N), z = new Float64Array(N), p = new Float64Array(N), Ap = new Float64Array(N);
+  sys.matvec(x, Ap); for (let i = 0; i < N; i++) r[i] = sys.rhs[i] - Ap[i];
+  const inv = Float64Array.from(sys.diag, v => 1 / v);
+  for (let i = 0; i < N; i++) { z[i] = r[i] * inv[i]; p[i] = z[i]; }
+  let rz = 0; for (let i = 0; i < N; i++) rz += r[i] * z[i];
+  let bnorm = 0; for (let i = 0; i < N; i++) bnorm += sys.rhs[i] * sys.rhs[i]; bnorm = Math.sqrt(bnorm) || 1;
+  for (let it = 0; it < maxit; it++) {
+    sys.matvec(p, Ap); let pAp = 0; for (let i = 0; i < N; i++) pAp += p[i] * Ap[i];
+    const alpha = rz / pAp;
+    for (let i = 0; i < N; i++) { x[i] += alpha * p[i]; r[i] -= alpha * Ap[i]; }
+    let rn = 0; for (let i = 0; i < N; i++) rn += r[i] * r[i];
+    if (Math.sqrt(rn) < tol * bnorm) return {x, it: it + 1};
+    for (let i = 0; i < N; i++) z[i] = r[i] * inv[i];
+    let rz2 = 0; for (let i = 0; i < N; i++) rz2 += r[i] * z[i];
+    const beta = rz2 / rz; rz = rz2;
+    for (let i = 0; i < N; i++) p[i] = z[i] + beta * p[i];
+  }
+  return {x, it: maxit};
+}
+
+let RES = null;
+$('solve').addEventListener('click', () => {
+  const [Lx, Ly, Lz] = dims(), k = +$('k').value * +$('kU').value;
+  if (!(Lx > 0 && Ly > 0 && Lz > 0) || !(k > 0)) { $('status').innerHTML = '<span class="err">dimensions and conductivity must be positive</span>'; return; }
+  const faces = readBCs();
+  const closes = Object.values(faces).some(b => b.type === 'fixed' || (b.type === 'conv' && (b.h > 0 || b.eps > 0)));
+  if (!closes) { $('status').innerHTML = '<span class="err">No face lets heat out (no fixed temperature or convection): a steady state does not exist.</span>'; return; }
+  const n = gridSize(), d = [Lx / n[0], Ly / n[1], Lz / n[2]], N = n[0] * n[1] * n[2];
+  const qgen = $('qgenU').value === 'W' ? +$('qgen').value / (Lx * Ly * Lz) : +$('qgen').value;
+  $('status').textContent = 'Solving…';
+  setTimeout(() => {
+    let T = new Float64Array(N).fill(25), its = 0;
+    const anyRad = Object.values(faces).some(b => b.type === 'conv' && b.eps > 0);
+    for (let pic = 0; pic < (anyRad ? 12 : 1); pic++) {
+      const sys = assemble(n, d, k, faces, qgen, T); const r = cg(sys, T); its += r.it;
+      let dmax = 0; for (let i = 0; i < N; i++) dmax = Math.max(dmax, Math.abs(r.x[i] - T[i])); T = r.x;
+      if (dmax < 1e-4) break;
+    }
+    RES = {T, n, d, dims: [Lx, Ly, Lz], k, faces, qgen, sys: assemble(n, d, k, faces, qgen, T)};
+    $('status').textContent = `done: ${N.toLocaleString()} cells, ${its} solver iterations`;
+    $('results').style.display = '';
+    showResults();
+  }, 30);
+});
+
+// ------------------------------------------------------------------ results
+function faceTemps(f) {
+  // temperature on the boundary face from the adjacent cell and its heat flow (T_face = T_cell - q/Gh)
+  const {T, n, d, k, faces, sys} = RES, [nx, ny, nz] = n, bc = faces[f], Gh = k * sys.A[f] / sys.half[f];
+  const ax = f[1], sign = f[0] === '+';
+  const dimsIdx = {x: [ny, nz, (u, v) => ((v * ny + u) * nx + (sign ? nx - 1 : 0))], y: [nx, nz, (u, v) => ((v * ny + (sign ? ny - 1 : 0)) * nx + u)], z: [nx, ny, (u, v) => (((sign ? nz - 1 : 0) * ny + v) * nx + u)]}[ax];
+  const [nu, nv, at] = dimsIdx, out = [], Q = [];
+  let Qtot = 0;
+  for (let v = 0; v < nv; v++) { const row = []; for (let u = 0; u < nu; u++) {
+    const a = at(u, v), Tc = T[a]; let q = 0;                                    // heat OUT of the block through this cell face, W
+    if (bc.type === 'fixed') q = Gh * (Tc - bc.T);
+    else if (bc.type === 'flux') q = -bc.q * sys.A[f];
+    else if (bc.type === 'conv') { let h = bc.h; if (bc.eps > 0) { const Tk = Tc + 273.15, Ts = bc.Tsur + 273.15; h += bc.eps * SIG * (Tk + Ts) * (Tk * Tk + Ts * Ts); }
+      const G = h > 0 ? 1 / (1 / (h * sys.A[f]) + 1 / Gh) : 0; q = G * (Tc - bc.Tinf); }
+    row.push(Tc - q / Gh); Qtot += q; } out.push(row); }
+  return {grid: out, Qout: Qtot};
+}
+function showResults() {
+  const {T, n, d, dims: [Lx, Ly, Lz], k, faces, qgen} = RES, tu = $('tU').value, [nx, ny, nz] = n;
+  let Tmin = Infinity, Tmax = -Infinity, Tsum = 0; for (const v of T) { Tmin = Math.min(Tmin, v); Tmax = Math.max(Tmax, v); Tsum += v; }
+  // 3D: six faces painted with their temperature
+  const cx = Array.from({length: nx}, (_, i) => (i + .5) * d[0]), cy = Array.from({length: ny}, (_, j) => (j + .5) * d[1]), cz = Array.from({length: nz}, (_, l) => (l + .5) * d[2]);
+  const traces = [], flows = {};
+  for (const [f] of FACES) {
+    const ft = faceTemps(f); flows[f] = ft.Qout;
+    const g = ft.grid.map(r => r.map(v => fromC(v, tu)));
+    const ax = f[1], at = f[0] === '+' ? {x: Lx, y: Ly, z: Lz}[ax] : 0;
+    let X, Y, Z;
+    if (ax === 'x') { X = cz.map(() => cy.map(() => at)); Y = cz.map(() => cy); Z = cz.map(z => cy.map(() => z)); }
+    else if (ax === 'y') { X = cz.map(() => cx); Y = cz.map(() => cx.map(() => at)); Z = cz.map(z => cx.map(() => z)); }
+    else { X = cy.map(() => cx); Y = cy.map(y => cx.map(() => y)); Z = cy.map(() => cx.map(() => at)); }
+    traces.push({type: 'surface', x: X, y: Y, z: Z, surfacecolor: g, colorscale: 'Jet', cmin: fromC(Tmin, tu), cmax: fromC(Tmax, tu), showscale: f === '+z',
+                 colorbar: {title: tSym(), len: .7}, name: f, text: g.map(r => r.map(v => v.toFixed(1) + ' ' + tSym())), hovertemplate: '%{text}<extra></extra>'});
+  }
+  const Lm = Math.max(Lx, Ly, Lz), asp = [Lx, Ly, Lz].map(v => Math.max(v / Lm, 0.12));
+  Plotly.react('view3d', traces, {scene: {xaxis: {title: 'x'}, yaxis: {title: 'y'}, zaxis: {title: 'z'}, aspectmode: 'manual', aspectratio: {x: asp[0], y: asp[1], z: asp[2]},
+    camera: {eye: {x: 1.6, y: -1.6, z: 1.1}}}, margin: {l: 0, r: 0, t: 10, b: 0}}, {responsive: true, displaylogo: false});
+  showSlice();
+  // energy balance and summary
+  const Qout = Object.values(flows).reduce((s, v) => s + v, 0);
+  const areaOf = {'-x': Ly * Lz, '+x': Ly * Lz, '-y': Lx * Lz, '+y': Lx * Lz, '-z': Lx * Ly, '+z': Lx * Ly};
+  const Qflux = Object.entries(faces).filter(([f, b]) => b.type === 'flux').reduce((s, [f, b]) => s + b.q * areaOf[f], 0);
+  const vol = Lx * Ly * Lz, area = 2 * (Lx * Ly + Lx * Lz + Ly * Lz);
+  const hmax = Math.max(0, ...Object.values(faces).filter(b => b.type === 'conv').map(b => b.h));
+  const bi = hmax * (vol / area) / k;
+  const rowsHtml = FACES.map(([f, lab]) => `<tr><td>${lab}</td><td>${{fixed: 'fixed T', flux: 'heat in', insulated: 'insulated', conv: 'convection' + (faces[f].eps > 0 ? ' + radiation' : '')}[faces[f].type]}</td><td style="text-align:right"><b>${flows[f] >= 0 ? '' : '−'}${Math.abs(flows[f]).toPrecision(4)} W</b> ${flows[f] >= 0 ? 'out' : 'in'}</td></tr>`).join('');
+  $('stats').innerHTML = `Temperature: min <b>${fromC(Tmin, tu).toFixed(1)}</b>, max <b>${fromC(Tmax, tu).toFixed(1)}</b>, average <b>${fromC(Tsum / T.length, tu).toFixed(1)} ${tSym()}</b>.
+    &nbsp; Heat in: <b>${(qgen * vol + Qflux).toPrecision(4)} W</b> (generation ${(qgen * vol).toPrecision(3)} W + heat-flux faces ${Qflux.toPrecision(3)} W). &nbsp; Heat out through fixed-temperature and convection faces: <b>${(Qout + Qflux).toPrecision(4)} W</b>
+    <span class="note" style="display:inline">(in = out at steady state, to solver tolerance)</span>.<br>
+    Biot number with the largest h: <b>${bi.toExponential(2)}</b> ${bi < 0.1 ? '(below 0.1: the block is nearly uniform in temperature; a lumped estimate would have been fine)' : '(above 0.1: internal gradients matter; this 3D solution is needed)'}.
+    <table class="in" style="margin-top:8px;max-width:560px"><tr><th style="text-align:left">Face</th><th style="text-align:left">Condition</th><th style="text-align:right">Heat flow</th></tr>${rowsHtml}</table>`;
+}
+function showSlice() {
+  if (!RES) return;
+  const {T, n, d, dims: [Lx, Ly, Lz]} = RES, tu = $('tU').value, [nx, ny, nz] = n, ax = $('sliceAxis').value, s = +$('slicePos').value;
+  const cx = Array.from({length: nx}, (_, i) => (i + .5) * d[0]), cy = Array.from({length: ny}, (_, j) => (j + .5) * d[1]), cz = Array.from({length: nz}, (_, l) => (l + .5) * d[2]);
+  let z, xs, ys, xl, yl, pos;
+  if (ax === 'x') { const i = Math.min(nx - 1, Math.floor(s * nx)); pos = cx[i]; xs = cy; ys = cz; xl = 'y'; yl = 'z'; z = cz.map((_, l) => cy.map((_, j) => fromC(T[(l * ny + j) * nx + i], tu))); }
+  else if (ax === 'y') { const j = Math.min(ny - 1, Math.floor(s * ny)); pos = cy[j]; xs = cx; ys = cz; xl = 'x'; yl = 'z'; z = cz.map((_, l) => cx.map((_, i) => fromC(T[(l * ny + j) * nx + i], tu))); }
+  else { const l = Math.min(nz - 1, Math.floor(s * nz)); pos = cz[l]; xs = cx; ys = cy; xl = 'x'; yl = 'y'; z = cy.map((_, j) => cx.map((_, i) => fromC(T[(l * ny + j) * nx + i], tu))); }
+  const u = +$('lenU').value, un = $('lenU').options[$('lenU').selectedIndex].text;
+  $('sliceLab').textContent = `${ax} = ${(pos / u).toPrecision(3)} ${un}`;
+  Plotly.react('slice', [{type: 'heatmap', x: xs.map(v => v / u), y: ys.map(v => v / u), z, colorscale: 'Jet', colorbar: {title: tSym()}, hovertemplate: `${xl} = %{x:.3g}, ${yl} = %{y:.3g}<br>T = %{z:.1f}<extra></extra>`}],
+    {xaxis: {title: `${xl} (${un})`}, yaxis: {title: `${yl} (${un})`, scaleanchor: 'x'}, margin: {l: 50, r: 10, t: 10, b: 45}}, {responsive: true, displaylogo: false});
+}
+$('sliceAxis').addEventListener('change', showSlice);
+$('slicePos').addEventListener('input', showSlice);
+$('tU').addEventListener('change', () => { if (RES) showResults(); });
+</script>
+</body>
+</html>
